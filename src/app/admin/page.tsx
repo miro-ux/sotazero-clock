@@ -86,28 +86,28 @@ function formatDuration(ms: number): string {
 
 /** Group events by employee name and compute worked time + last status */
 function buildSummary(
-  events: Array<{ employeeId: string; employeeName: string; type: "in" | "out"; timestamp: number }>
+  events: Array<{ employeeId: Id<"employees">; employeeName: string; type: "in" | "out"; timestamp: number }>
 ) {
   const map = new Map<
     string,
-    { employeeId: string; events: typeof events; lastType: "in" | "out" | null }
+    { employeeId: Id<"employees">; events: typeof events }
   >();
 
   for (const e of events) {
-    if (!map.has(e.employeeName)) {
-      map.set(e.employeeName, { employeeId: e.employeeId, events: [], lastType: null });
+    const existing = map.get(e.employeeName);
+    if (existing) {
+      existing.events.push(e);
+    } else {
+      map.set(e.employeeName, { employeeId: e.employeeId, events: [e] });
     }
-    const entry = map.get(e.employeeName);
-    if (!entry) continue;
-    entry.events.push(e);
   }
 
   return Array.from(map.entries())
-    .map(([name, { employeeId, events }]) => {
-      const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
+    .map(([name, { employeeId, events: evts }]) => {
+      const sorted = [...evts].sort((a, b) => a.timestamp - b.timestamp);
       const lastType = sorted[sorted.length - 1]?.type ?? null;
-      const workedMs = calcWorkedMs(events);
-      return { name, employeeId, lastType, workedMs, eventCount: events.length };
+      const workedMs = calcWorkedMs(evts);
+      return { name, employeeId, lastType, workedMs, eventCount: evts.length };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -322,7 +322,7 @@ export default function AdminPage() {
     );
   }
 
-  const summary = todayEvents ? buildSummary(todayEvents as Array<{ employeeId: string; employeeName: string; type: "in" | "out"; timestamp: number }>) : null;
+  const summary = todayEvents ? buildSummary(todayEvents) : null;
 
   // ── Admin Panel ──
   return (
@@ -390,8 +390,13 @@ export default function AdminPage() {
               <>
                 {/* Per-person summary cards */}
                 <div className="space-y-3 mb-8">
-                  {summary.map(({ name, lastType, workedMs, eventCount }) => (
-                    <div key={name} className="flex items-center gap-4 p-5 rounded-2xl bg-white/6 border border-white/8">
+                  {summary.map(({ name, employeeId, lastType, workedMs, eventCount }) => (
+                    <button
+                      type="button"
+                      key={name}
+                      className="w-full flex items-center gap-4 p-5 rounded-2xl bg-white/6 border border-white/8 cursor-pointer hover:bg-white/8 transition-colors text-left"
+                      onClick={() => setSelectedEmployee({ id: employeeId, name })}
+                    >
                       <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xl font-light shrink-0">
                         {name[0].toUpperCase()}
                       </div>
@@ -413,7 +418,7 @@ export default function AdminPage() {
                       >
                         {lastType === "in" ? "In" : "Out"}
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
 
@@ -451,34 +456,35 @@ export default function AdminPage() {
               <p className="text-white/20 text-center py-12">No employees yet</p>
             ) : (
               employees.map((emp) => (
-                <button
-                  type="button"
-                  key={emp._id}
-                  className="w-full flex items-center gap-4 p-5 rounded-2xl bg-white/6 border border-white/8 cursor-pointer hover:bg-white/8 transition-colors text-left"
-                  onClick={() => setSelectedEmployee({ id: emp._id, name: emp.name })}
-                >
-                  <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xl font-light shrink-0">
-                    {emp.name[0].toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white/90 text-lg font-light">{emp.name}</p>
-                    {emp.isAdmin && (
-                      <span className="text-blue-400/70 text-xs flex items-center gap-1 mt-0.5">
-                        <Shield size={10} /> Admin
-                      </span>
-                    )}
-                  </div>
-                  <ChevronRight size={18} className="text-white/20 shrink-0" />
+                <div key={emp._id} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center gap-4 p-5 rounded-2xl bg-white/6 border border-white/8 cursor-pointer hover:bg-white/8 transition-colors text-left"
+                    onClick={() => setSelectedEmployee({ id: emp._id, name: emp.name })}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xl font-light shrink-0">
+                      {emp.name[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-white/90 text-lg font-light">{emp.name}</p>
+                      {emp.isAdmin && (
+                        <span className="text-blue-400/70 text-xs flex items-center gap-1 mt-0.5">
+                          <Shield size={10} /> Admin
+                        </span>
+                      )}
+                    </div>
+                    <ChevronRight size={18} className="text-white/20 shrink-0" />
+                  </button>
                   {!emp.isAdmin && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); removeEmployee({ id: emp._id }); }}
-                      className="p-3 rounded-xl hover:bg-red-900/40 text-white/20 hover:text-red-400 transition-colors"
+                      onClick={() => removeEmployee({ id: emp._id })}
+                      className="p-3 rounded-xl hover:bg-red-900/40 text-white/20 hover:text-red-400 transition-colors shrink-0"
                     >
                       <Trash2 size={18} />
                     </button>
                   )}
-                </button>
+                </div>
               ))
             )}
           </div>
