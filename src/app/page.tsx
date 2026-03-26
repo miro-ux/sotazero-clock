@@ -117,7 +117,7 @@ export default function HomePage() {
   // ── Success overlay ──
   if (stage === "success" && employee) {
     return (
-      <div className={cn("h-screen w-screen flex flex-col items-center justify-center gap-8 fade-in", successBg)}>
+      <div className={cn("h-screen w-full overflow-hidden flex flex-col items-center justify-center gap-8 fade-in", successBg)}>
         <CheckCircle size={96} className={iconColor} strokeWidth={1.5} />
         <div className="text-center">
           <p className="text-white/90 text-4xl font-light">{employee.name}</p>
@@ -132,7 +132,7 @@ export default function HomePage() {
   // ── Confirm overlay ──
   if (stage === "confirm" && employee) {
     return (
-      <div className={cn("h-screen w-screen flex flex-col items-center justify-center gap-10 px-8", successBg)}>
+      <div className={cn("h-screen w-full overflow-hidden flex flex-col items-center justify-center gap-10 px-8", successBg)}>
         <div className="fade-in flex flex-col items-center gap-8 text-center w-full max-w-sm">
           <div>
             <p className="text-white/40 text-sm uppercase tracking-widest mb-2">
@@ -166,7 +166,7 @@ export default function HomePage() {
   // ── Loading overlay ──
   if (stage === "submitting" || (stage === "lookup" && employee !== null)) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a0f]">
+      <div className="h-screen w-full overflow-hidden flex items-center justify-center bg-[#0a0a0f]">
         <Loader2 size={56} className="text-white/30 animate-spin" />
       </div>
     );
