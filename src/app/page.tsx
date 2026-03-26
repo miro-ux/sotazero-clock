@@ -30,9 +30,9 @@ export default function HomePage() {
   const [resolvedAction, setResolvedAction] = useState<"in" | "out">("in");
   const [, setTick] = useState(0);
 
-  // Refresh "time since" display every 60s
+  // Refresh "time since" display every 15s
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    const id = setInterval(() => setTick((t) => t + 1), 15000);
     return () => clearInterval(id);
   }, []);
 

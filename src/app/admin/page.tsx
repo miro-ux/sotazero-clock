@@ -126,6 +126,13 @@ export default function AdminPage() {
 
   const [pinError, setPinError] = useState(false);
   const [tab, setTab] = useState<Tab>("events");
+  const [, setTick] = useState(0);
+
+  // Refresh durations every 15s
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
   const [selectedEmployee, setSelectedEmployee] = useState<{
     id: Id<"employees">;
     name: string;
