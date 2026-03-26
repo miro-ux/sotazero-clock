@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import PinPad from "@/components/PinPad";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Shield,
   UserPlus,
@@ -86,11 +86,14 @@ function buildSummary(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function getPreAuthed() {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("auth") === "1";
+}
+
 export default function AdminPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const preAuthed = searchParams.get("auth") === "1";
-  const [authenticated, setAuthenticated] = useState(preAuthed);
+  const [authenticated, setAuthenticated] = useState(getPreAuthed);
   const [pinError, setPinError] = useState(false);
   const [tab, setTab] = useState<Tab>("events");
 
