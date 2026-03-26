@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import PinPad from "@/components/PinPad";
@@ -86,14 +86,18 @@ function buildSummary(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function getPreAuthed() {
-  if (typeof window === "undefined") return false;
-  return new URLSearchParams(window.location.search).get("auth") === "1";
-}
-
 export default function AdminPage() {
   const router = useRouter();
-  const [authenticated, setAuthenticated] = useState(getPreAuthed);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("auth") === "1") {
+      setAuthenticated(true);
+    }
+    setCheckingAuth(false);
+  }, []);
+
   const [pinError, setPinError] = useState(false);
   const [tab, setTab] = useState<Tab>("events");
 
@@ -134,6 +138,13 @@ export default function AdminPage() {
       setAddError(e instanceof Error ? e.message : "Failed to add employee");
     }
   };
+
+  // ── Loading while checking auth ──
+  if (checkingAuth) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a0f]" />
+    );
+  }
 
   // ── PIN gate ──
   if (!authenticated) {
