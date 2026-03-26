@@ -172,19 +172,57 @@ export default function HomePage() {
     );
   }
 
-  // ── Main view: currently-in list + pin pad ──
+  const inCount = currentlyIn?.length ?? 0;
+
+  // ── Currently In sidebar/panel content ──
+  const currentlyInPanel = (
+    <>
+      <div className="flex items-center gap-3 mb-6">
+        <Clock size={22} className="text-emerald-400/70" />
+        <span className="text-white/40 text-sm uppercase tracking-widest">Currently In</span>
+        <span className="ml-auto bg-emerald-500/20 text-emerald-400 text-lg font-mono px-3 py-1 rounded-full">
+          {inCount}
+        </span>
+      </div>
+      <div className="flex flex-col gap-3 flex-1 overflow-y-auto">
+        {!currentlyIn ? (
+          <span className="text-white/15 text-lg">Loading...</span>
+        ) : currentlyIn.length === 0 ? (
+          <span className="text-white/15 text-lg">Nobody clocked in</span>
+        ) : (
+          currentlyIn.map((person) => (
+            <div
+              key={person.employeeId}
+              className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20"
+            >
+              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-xl font-light shrink-0">
+                {person.employeeName[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white/90 text-lg font-light truncate">{person.employeeName}</p>
+                <p className="text-emerald-400/50 text-sm font-mono mt-0.5">{formatSince(person.since)}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
+
+  // ── Main view: sidebar (desktop) / top (mobile) + pin pad ──
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0a0f]">
-      {/* Currently In — top */}
-      <div className="shrink-0 px-6 pt-6 pb-3">
+    <div className="flex flex-col md:flex-row h-screen w-full overflow-hidden bg-[#0a0a0f]">
+      {/* Currently In — left sidebar on desktop, top on mobile */}
+      {/* Mobile: horizontal strip */}
+      <div className="md:hidden shrink-0 px-5 pt-5 pb-3">
         <div className="flex items-center gap-2 mb-3">
-          <Clock size={16} className="text-emerald-400/70" />
-          <span className="text-white/30 text-xs uppercase tracking-widest">Currently In</span>
-          {currentlyIn && currentlyIn.length > 0 && (
-            <span className="ml-auto text-emerald-400/60 text-sm font-mono">{currentlyIn.length}</span>
-          )}
+          <Clock size={18} className="text-emerald-400/70" />
+          <span className="text-white/40 text-xs uppercase tracking-widest">Currently In</span>
+          <span className="ml-auto bg-emerald-500/20 text-emerald-400 text-sm font-mono px-2.5 py-0.5 rounded-full">
+            {inCount}
+          </span>
         </div>
-        <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
+        <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
           {!currentlyIn ? (
             <span className="text-white/15 text-sm">Loading...</span>
           ) : currentlyIn.length === 0 ? (
@@ -193,21 +231,24 @@ export default function HomePage() {
             currentlyIn.map((person) => (
               <div
                 key={person.employeeId}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/60 border border-emerald-800/30"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-950/40 border border-emerald-800/20"
               >
-                <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-sm font-light shrink-0">
+                <div className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-base font-light shrink-0">
                   {person.employeeName[0].toUpperCase()}
                 </div>
-                <span className="text-white/80 text-sm font-light">{person.employeeName}</span>
-                <span className="text-emerald-400/40 text-xs font-mono">{formatSince(person.since)}</span>
+                <span className="text-white/80 text-base font-light">{person.employeeName}</span>
+                <span className="text-emerald-400/40 text-sm font-mono">{formatSince(person.since)}</span>
               </div>
             ))
           )}
         </div>
+        <div className="h-px bg-white/8 mt-3" />
       </div>
 
-      {/* Divider */}
-      <div className="h-px bg-white/8 mx-6" />
+      {/* Desktop: left sidebar */}
+      <div className="hidden md:flex flex-col w-80 lg:w-96 shrink-0 border-r border-white/8 p-6 lg:p-8">
+        {currentlyInPanel}
+      </div>
 
       {/* PIN pad — center */}
       <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
