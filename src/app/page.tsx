@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import PinPad from "@/components/PinPad";
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, Clock, Loader2, LogIn, LogOut, Settings } from "lucide-react";
+import { CheckCircle, Clock, Loader2, LogIn, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Stage = "pin" | "lookup" | "confirm" | "submitting" | "success";
@@ -59,10 +59,11 @@ export default function HomePage() {
     }
   }, [employee, stage, router]);
 
-  // Step 2: determine action from last event
+  // Step 2: determine action from last event (skip for admins — they go to admin panel)
   useEffect(() => {
     if (stage !== "lookup") return;
     if (!employee) return;
+    if (employee.isAdmin) return;
     if (lastEvent === undefined) return;
     const action = lastEvent?.type === "in" ? "out" : "in";
     setResolvedAction(action);
@@ -167,16 +168,6 @@ export default function HomePage() {
   // ── Main view: currently-in list + pin pad ──
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0a0f]">
-      {/* Admin gear */}
-      <button
-        type="button"
-        onClick={() => router.push("/admin")}
-        className="absolute top-5 right-5 z-10 p-3 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 transition-colors"
-        aria-label="Admin"
-      >
-        <Settings size={26} className="text-white/35" />
-      </button>
-
       {/* Currently In — top */}
       <div className="shrink-0 px-6 pt-6 pb-3">
         <div className="flex items-center gap-2 mb-3">
