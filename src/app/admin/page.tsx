@@ -138,6 +138,11 @@ export default function AdminPage() {
     name: string;
   } | null>(null);
 
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: Id<"employees">;
+    name: string;
+  } | null>(null);
+
   const [newName, setNewName] = useState("");
   const [newPin, setNewPin] = useState("");
   const [addError, setAddError] = useState("");
@@ -485,7 +490,7 @@ export default function AdminPage() {
                   {!emp.isAdmin && (
                     <button
                       type="button"
-                      onClick={() => removeEmployee({ id: emp._id })}
+                      onClick={() => setPendingDelete({ id: emp._id, name: emp.name })}
                       className="p-3 rounded-xl hover:bg-red-900/40 text-white/20 hover:text-red-400 transition-colors shrink-0"
                     >
                       <Trash2 size={18} />
@@ -549,6 +554,41 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {pendingDelete && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+          <div className="bg-[#141419] border border-white/10 rounded-3xl p-8 max-w-sm w-full text-center space-y-6">
+            <Trash2 size={40} className="text-red-400 mx-auto" />
+            <div>
+              <p className="text-white/90 text-2xl font-light">{pendingDelete.name}</p>
+              <p className="text-red-400 text-lg uppercase tracking-widest font-bold mt-3">
+                DELETE THIS EMPLOYEE?
+              </p>
+              <p className="text-white/30 text-sm mt-2">THIS ACTION CANNOT BE UNDONE</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="flex-1 py-5 rounded-2xl bg-white/8 hover:bg-white/12 text-white/60 text-lg font-light transition-colors"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  removeEmployee({ id: pendingDelete.id });
+                  setPendingDelete(null);
+                }}
+                className="flex-1 py-5 rounded-2xl bg-red-600 hover:bg-red-500 active:bg-red-700 text-white text-lg font-bold uppercase tracking-wider transition-colors"
+              >
+                DELETE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
