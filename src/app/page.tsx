@@ -38,7 +38,7 @@ export default function HomePage() {
 
   const employee = useQuery(
     api.employees.getByPin,
-    stage === "lookup" || stage === "confirm" ? { pin } : "skip"
+    pin.length === 4 ? { pin } : "skip"
   );
 
   const lastEvent = useQuery(
