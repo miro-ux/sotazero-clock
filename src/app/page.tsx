@@ -28,6 +28,13 @@ export default function HomePage() {
   const [pinError, setPinError] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [resolvedAction, setResolvedAction] = useState<"in" | "out">("in");
+  const [, setTick] = useState(0);
+
+  // Refresh "time since" display every 60s
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   const employee = useQuery(
     api.employees.getByPin,

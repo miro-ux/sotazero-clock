@@ -203,14 +203,14 @@ export default function AdminPage() {
   // ── Loading while checking auth ──
   if (checkingAuth) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a0f]" />
+      <div className="h-screen w-full flex items-center justify-center bg-[#0a0a0f]" />
     );
   }
 
   // ── PIN gate ──
   if (!authenticated) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center gap-8 px-6 bg-[#0a0a0f]">
+      <div className="h-screen w-full flex flex-col items-center justify-center gap-8 px-6 bg-[#0a0a0f]">
         <div className="flex items-center gap-3">
           <Shield size={32} className="text-blue-400" strokeWidth={1.5} />
           <span className="text-blue-300 text-xl font-light">Admin Access</span>
@@ -242,7 +242,7 @@ export default function AdminPage() {
     }
 
     return (
-      <div className="min-h-screen w-screen bg-[#0a0a0f] flex flex-col">
+      <div className="min-h-screen w-full bg-[#0a0a0f] flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
           <button
@@ -326,7 +326,7 @@ export default function AdminPage() {
 
   // ── Admin Panel ──
   return (
-    <div className="min-h-screen w-screen bg-[#0a0a0f] flex flex-col">
+    <div className="min-h-screen w-full bg-[#0a0a0f] flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
         <button
