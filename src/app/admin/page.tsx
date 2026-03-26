@@ -111,9 +111,36 @@ export default function AdminPage() {
     api.clockEvents.getTodayEvents,
     authenticated ? { date: new Date().toISOString().split("T")[0] } : "skip"
   );
+  const adminEmployee = useQuery(
+    api.employees.getByPin,
+    authenticated ? { pin: ADMIN_PIN } : "skip"
+  );
+  const adminLastEvent = useQuery(
+    api.clockEvents.getLastEventForEmployee,
+    adminEmployee ? { employeeId: adminEmployee._id } : "skip"
+  );
 
   const addEmployee = useMutation(api.employees.addEmployee);
   const removeEmployee = useMutation(api.employees.removeEmployee);
+  const clockInOut = useMutation(api.clockEvents.clockInOut);
+
+  const adminIsIn = adminLastEvent?.type === "in";
+  const [clockLoading, setClockLoading] = useState(false);
+
+  const handleAdminClock = async () => {
+    if (!adminEmployee || clockLoading) return;
+    const action = adminIsIn ? "out" : "in";
+    setClockLoading(true);
+    try {
+      await clockInOut({
+        employeeId: adminEmployee._id,
+        employeeName: adminEmployee.name,
+        type: action,
+      });
+    } finally {
+      setClockLoading(false);
+    }
+  };
 
   const handleAdminPin = (pin: string) => {
     if (pin === ADMIN_PIN) {
@@ -180,6 +207,22 @@ export default function AdminPage() {
         </button>
         <Shield size={22} className="text-blue-400" />
         <span className="text-white/80 text-lg font-light">Admin Panel</span>
+        {adminEmployee && (
+          <button
+            type="button"
+            onClick={handleAdminClock}
+            disabled={clockLoading}
+            className={cn(
+              "ml-auto flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all active:scale-95",
+              adminIsIn
+                ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
+                : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+            )}
+          >
+            {adminIsIn ? <LogOut size={18} /> : <LogIn size={18} />}
+            {adminIsIn ? "Clock Out" : "Clock In"}
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
