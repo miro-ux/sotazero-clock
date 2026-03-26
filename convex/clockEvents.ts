@@ -53,6 +53,18 @@ export const getLastEventForEmployee = query({
   },
 });
 
+/** Returns all clock events for a given employee, newest first */
+export const getEventsForEmployee = query({
+  args: { employeeId: v.id("employees") },
+  handler: async (ctx, { employeeId }) => {
+    return await ctx.db
+      .query("clockEvents")
+      .filter((q) => q.eq(q.field("employeeId"), employeeId))
+      .order("desc")
+      .collect();
+  },
+});
+
 /** Returns all employees currently clocked in (last event = "in") */
 export const getCurrentlyIn = query({
   args: {},

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import PinPad from "@/components/PinPad";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +17,7 @@ import {
   ArrowLeft,
   CheckCircle,
   Timer,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +25,33 @@ const ADMIN_PIN = "8599";
 
 type Tab = "employees" | "events" | "add";
 
-/** Compute total time worked from a list of clock events for one employee.
- *  Pairs each "in" with the next "out" chronologically. */
+/** Format a timestamp as HH:MM:SS (24h, zero-padded, always consistent) */
+function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
+/** Format a timestamp as DD/MM/YYYY */
+function fmtDate(ts: number): string {
+  const d = new Date(ts);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mo}/${yyyy}`;
+}
+
+/** Format today's date as "Wednesday, 26 March" */
+function fmtToday(): string {
+  const d = new Date();
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+/** Compute total time worked from a list of clock events for one employee. */
 function calcWorkedMs(
   events: Array<{ type: "in" | "out"; timestamp: number }>
 ): number {
@@ -39,7 +66,6 @@ function calcWorkedMs(
       lastIn = null;
     }
   }
-  // If still clocked in, count up to now
   if (lastIn !== null) {
     total += Date.now() - lastIn;
   }
@@ -60,16 +86,16 @@ function formatDuration(ms: number): string {
 
 /** Group events by employee name and compute worked time + last status */
 function buildSummary(
-  events: Array<{ employeeName: string; type: "in" | "out"; timestamp: number }>
+  events: Array<{ employeeId: string; employeeName: string; type: "in" | "out"; timestamp: number }>
 ) {
   const map = new Map<
     string,
-    { events: typeof events; lastType: "in" | "out" | null }
+    { employeeId: string; events: typeof events; lastType: "in" | "out" | null }
   >();
 
   for (const e of events) {
     if (!map.has(e.employeeName)) {
-      map.set(e.employeeName, { events: [], lastType: null });
+      map.set(e.employeeName, { employeeId: e.employeeId, events: [], lastType: null });
     }
     const entry = map.get(e.employeeName);
     if (!entry) continue;
@@ -77,11 +103,11 @@ function buildSummary(
   }
 
   return Array.from(map.entries())
-    .map(([name, { events }]) => {
+    .map(([name, { employeeId, events }]) => {
       const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
       const lastType = sorted[sorted.length - 1]?.type ?? null;
       const workedMs = calcWorkedMs(events);
-      return { name, lastType, workedMs, eventCount: events.length };
+      return { name, employeeId, lastType, workedMs, eventCount: events.length };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -100,6 +126,10 @@ export default function AdminPage() {
 
   const [pinError, setPinError] = useState(false);
   const [tab, setTab] = useState<Tab>("events");
+  const [selectedEmployee, setSelectedEmployee] = useState<{
+    id: Id<"employees">;
+    name: string;
+  } | null>(null);
 
   const [newName, setNewName] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -118,6 +148,10 @@ export default function AdminPage() {
   const adminLastEvent = useQuery(
     api.clockEvents.getLastEventForEmployee,
     adminEmployee ? { employeeId: adminEmployee._id } : "skip"
+  );
+  const selectedEvents = useQuery(
+    api.clockEvents.getEventsForEmployee,
+    selectedEmployee ? { employeeId: selectedEmployee.id } : "skip"
   );
 
   const addEmployee = useMutation(api.employees.addEmployee);
@@ -191,7 +225,104 @@ export default function AdminPage() {
     );
   }
 
-  const summary = todayEvents ? buildSummary(todayEvents) : null;
+  // ── Employee Detail View ──
+  if (selectedEmployee) {
+    // Group events by date
+    const eventsByDate = new Map<string, Array<{ type: "in" | "out"; timestamp: number }>>();
+    if (selectedEvents) {
+      for (const e of selectedEvents) {
+        const dateKey = fmtDate(e.timestamp);
+        const existing = eventsByDate.get(dateKey);
+        if (existing) {
+          existing.push(e);
+        } else {
+          eventsByDate.set(dateKey, [e]);
+        }
+      }
+    }
+
+    return (
+      <div className="min-h-screen w-screen bg-[#0a0a0f] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
+          <button
+            type="button"
+            onClick={() => setSelectedEmployee(null)}
+            className="p-3 rounded-xl hover:bg-white/8 transition-colors text-white/40 hover:text-white/70"
+          >
+            <ArrowLeft size={22} />
+          </button>
+          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-lg font-light shrink-0">
+            {selectedEmployee.name[0].toUpperCase()}
+          </div>
+          <span className="text-white/80 text-lg font-light">{selectedEmployee.name}</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 md:p-8">
+          <div className="max-w-lg mx-auto">
+            {!selectedEvents ? (
+              <p className="text-white/20 text-center py-12">Loading...</p>
+            ) : selectedEvents.length === 0 ? (
+              <p className="text-white/20 text-center py-12">No events yet</p>
+            ) : (
+              <>
+                {/* Total worked */}
+                <div className="flex items-center gap-3 mb-6 p-5 rounded-2xl bg-white/6 border border-white/8">
+                  <Timer size={20} className="text-white/40" />
+                  <div>
+                    <p className="text-white/40 text-xs uppercase tracking-widest">Total Today</p>
+                    <p className="text-white/80 text-xl font-mono">
+                      {formatDuration(calcWorkedMs(
+                        selectedEvents.filter(e => e.date === new Date().toISOString().split("T")[0])
+                      ))}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Events grouped by date */}
+                {Array.from(eventsByDate.entries()).map(([dateStr, events]) => {
+                  const dayWorked = calcWorkedMs(events);
+                  return (
+                    <div key={dateStr} className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-white/30 text-xs uppercase tracking-widest">{dateStr}</p>
+                        <span className="text-white/30 text-xs font-mono">{formatDuration(dayWorked)}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {[...events].sort((a, b) => b.timestamp - a.timestamp).map((e) => (
+                          <div
+                            key={e.timestamp}
+                            className="flex items-center gap-4 px-4 py-3 rounded-xl bg-white/4"
+                          >
+                            {e.type === "in" ? (
+                              <LogIn size={16} className="text-emerald-400 shrink-0" />
+                            ) : (
+                              <LogOut size={16} className="text-rose-400 shrink-0" />
+                            )}
+                            <span className={cn(
+                              "font-light flex-1",
+                              e.type === "in" ? "text-emerald-400/70" : "text-rose-400/70"
+                            )}>
+                              Clock {e.type === "in" ? "In" : "Out"}
+                            </span>
+                            <span className="text-white/30 text-sm font-mono">
+                              {fmtTime(e.timestamp)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const summary = todayEvents ? buildSummary(todayEvents as Array<{ employeeId: string; employeeName: string; type: "in" | "out"; timestamp: number }>) : null;
 
   // ── Admin Panel ──
   return (
@@ -248,7 +379,7 @@ export default function AdminPage() {
         {tab === "events" && (
           <div className="space-y-3 max-w-lg mx-auto">
             <p className="text-white/30 text-xs uppercase tracking-widest mb-5">
-              {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+              {fmtToday()}
             </p>
 
             {!todayEvents || !summary ? (
@@ -301,11 +432,7 @@ export default function AdminPage() {
                       )}
                       <span className="text-white/70 font-light flex-1">{e.employeeName}</span>
                       <span className="text-white/30 text-sm font-mono">
-                        {new Date(e.timestamp).toLocaleTimeString("en-GB", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
+                        {fmtTime(e.timestamp)}
                       </span>
                     </div>
                   ))}
@@ -324,9 +451,11 @@ export default function AdminPage() {
               <p className="text-white/20 text-center py-12">No employees yet</p>
             ) : (
               employees.map((emp) => (
-                <div
+                <button
+                  type="button"
                   key={emp._id}
-                  className="flex items-center gap-4 p-5 rounded-2xl bg-white/6 border border-white/8"
+                  className="w-full flex items-center gap-4 p-5 rounded-2xl bg-white/6 border border-white/8 cursor-pointer hover:bg-white/8 transition-colors text-left"
+                  onClick={() => setSelectedEmployee({ id: emp._id, name: emp.name })}
                 >
                   <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xl font-light shrink-0">
                     {emp.name[0].toUpperCase()}
@@ -339,16 +468,17 @@ export default function AdminPage() {
                       </span>
                     )}
                   </div>
+                  <ChevronRight size={18} className="text-white/20 shrink-0" />
                   {!emp.isAdmin && (
                     <button
                       type="button"
-                      onClick={() => removeEmployee({ id: emp._id })}
+                      onClick={(e) => { e.stopPropagation(); removeEmployee({ id: emp._id }); }}
                       className="p-3 rounded-xl hover:bg-red-900/40 text-white/20 hover:text-red-400 transition-colors"
                     >
                       <Trash2 size={18} />
                     </button>
                   )}
-                </div>
+                </button>
               ))
             )}
           </div>
