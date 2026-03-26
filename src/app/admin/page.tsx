@@ -208,7 +208,12 @@ export default function AdminPage() {
       setAddSuccess(true);
       setTimeout(() => setAddSuccess(false), 2500);
     } catch (e: unknown) {
-      setAddError(e instanceof Error ? e.message : "Failed to add employee");
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("PIN already in use")) {
+        setAddError("This PIN is already taken. Choose a different one.");
+      } else {
+        setAddError("Failed to add employee. Please try again.");
+      }
     }
   };
 
