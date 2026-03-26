@@ -1,9 +1,11 @@
-"use client";
-
 import "./globals.css";
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import type { Metadata } from "next";
+import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+export const metadata: Metadata = {
+  title: "Sota Zero Clock",
+  description: "Employee clock in/out",
+};
 
 export default function RootLayout({
   children,
@@ -13,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ConvexProvider client={convex}>{children}</ConvexProvider>
+        <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
     </html>
   );
