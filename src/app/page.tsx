@@ -199,7 +199,7 @@ export default function HomePage() {
                 {person.employeeName[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white/90 text-lg font-light truncate">{person.employeeName}</p>
+                <p className="text-white/90 text-2xl font-bold truncate">{person.employeeName}</p>
                 <p className="text-emerald-400/50 text-sm font-mono mt-0.5">{formatSince(person.since)}</p>
               </div>
             </div>
