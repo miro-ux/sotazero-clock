@@ -100,11 +100,22 @@ export const getClockedOutToday = query({
         .order("desc")
         .take(50);
 
-      // Filter to shift window and sort asc
-      const events = allEmployeeEvents
-        .filter((e) => e.timestamp >= shiftStartTs)
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .map((e) => ({ type: e.type, timestamp: e.timestamp }));
+      // Sort asc
+      const sorted = [...allEmployeeEvents].sort((a, b) => a.timestamp - b.timestamp);
+
+      // Find events in the shift window, but also include the last "in" before the window
+      // so that an in-before-6am → out-after-6am pair still counts as work
+      const shiftEvents: Array<{ type: "in" | "out"; timestamp: number }> = [];
+      for (let i = 0; i < sorted.length; i++) {
+        if (sorted[i].timestamp >= shiftStartTs) {
+          // If first event in window is "out", check if previous event was "in" (before window)
+          if (shiftEvents.length === 0 && sorted[i].type === "out" && i > 0 && sorted[i - 1].type === "in") {
+            shiftEvents.push({ type: sorted[i - 1].type, timestamp: sorted[i - 1].timestamp });
+          }
+          shiftEvents.push({ type: sorted[i].type, timestamp: sorted[i].timestamp });
+        }
+      }
+      const events = shiftEvents;
 
       let workedMs = 0;
       for (let i = 0; i < events.length; i++) {
