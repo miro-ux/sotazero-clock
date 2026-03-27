@@ -170,7 +170,7 @@ function fmtTime(ts: number): string {
 export default function HomePage() {
   const router = useRouter();
   const currentlyIn = useQuery(api.clockEvents.getCurrentlyIn);
-  const clockedOutToday = useQuery(api.clockEvents.getClockedOutToday, shiftDayParams());
+  const clockedOutToday = useQuery(api.clockEvents.getClockedOutToday, { shiftStartTs: shiftDayParams().shiftStartTs });
 
   const [stage, setStage] = useState<Stage>("pin");
   const [pin, setPin] = useState("");

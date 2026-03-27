@@ -65,43 +65,14 @@ export const getEventsForEmployee = query({
   },
 });
 
-/** Returns employees who worked today but are currently clocked out.
- *  A "shift day" runs from 6am today to 3am tomorrow.
- *  Accepts today + yesterday date strings to cover early morning events. */
+/** Returns employees currently clocked out who had activity today.
+ *  Uses shiftStartTs (6am local) as the cutoff — only events after that count.
+ *  Scans all employees, checks their global last event. */
 export const getClockedOutToday = query({
-  args: { todayDate: v.string(), yesterdayDate: v.string(), shiftStartTs: v.number() },
-  handler: async (ctx, { todayDate, yesterdayDate, shiftStartTs }) => {
-    // Fetch events from both calendar dates
-    const todayEvents = await ctx.db
-      .query("clockEvents")
-      .withIndex("by_date", (q) => q.eq("date", todayDate))
-      .order("asc")
-      .collect();
-    const yesterdayEvents = await ctx.db
-      .query("clockEvents")
-      .withIndex("by_date", (q) => q.eq("date", yesterdayDate))
-      .order("asc")
-      .collect();
-
-    // Merge and filter to shift window (>= shiftStartTs)
-    const allEvents = [...yesterdayEvents, ...todayEvents]
-      .filter((e) => e.timestamp >= shiftStartTs)
-      .sort((a, b) => a.timestamp - b.timestamp);
-
-    // Group by employee
-    const byEmployee = new Map<string, { employeeName: string; events: Array<{ type: "in" | "out"; timestamp: number }> }>();
-    for (const e of allEvents) {
-      const existing = byEmployee.get(e.employeeId);
-      if (existing) {
-        existing.events.push({ type: e.type, timestamp: e.timestamp });
-      } else {
-        byEmployee.set(e.employeeId, { employeeName: e.employeeName, events: [{ type: e.type, timestamp: e.timestamp }] });
-      }
-    }
-
-    // Filter: last event is "out" AND (has work time OR clocked out within last 3h)
+  args: { shiftStartTs: v.number() },
+  handler: async (ctx, { shiftStartTs }) => {
+    const employees = await ctx.db.query("employees").collect();
     const now = Date.now();
-    const threeHoursAgo = now - 3 * 60 * 60 * 1000;
     const result: Array<{
       employeeId: string;
       employeeName: string;
@@ -109,27 +80,49 @@ export const getClockedOutToday = query({
       lastOutTs: number;
       shiftEvents: Array<{ type: "in" | "out"; timestamp: number }>;
     }> = [];
-    for (const [employeeId, { employeeName, events }] of byEmployee) {
-      const last = events[events.length - 1];
-      if (last.type === "out") {
-        // Check global last event — if they clocked back in after, skip them
-        const globalLast = await ctx.db
-          .query("clockEvents")
-          .filter((q) => q.eq(q.field("employeeId"), employeeId))
-          .order("desc")
-          .first();
-        if (globalLast && globalLast.type === "in") continue;
 
-        let workedMs = 0;
-        for (let i = 0; i < events.length; i++) {
-          if (events[i].type === "in" && events[i + 1]?.type === "out") {
-            workedMs += events[i + 1].timestamp - events[i].timestamp;
-          }
+    for (const emp of employees) {
+      // Check global last event — only include if currently clocked out
+      const globalLast = await ctx.db
+        .query("clockEvents")
+        .filter((q) => q.eq(q.field("employeeId"), emp._id))
+        .order("desc")
+        .first();
+      if (!globalLast || globalLast.type !== "out") continue;
+
+      // Get all events for this employee, recent first, collect those in the shift window
+      const recentEvents = await ctx.db
+        .query("clockEvents")
+        .filter((q) => q.and(
+          q.eq(q.field("employeeId"), emp._id),
+          q.gte(q.field("timestamp"), shiftStartTs)
+        ))
+        .order("asc")
+        .collect();
+
+      if (recentEvents.length === 0) continue;
+
+      const events = recentEvents.map((e) => ({ type: e.type, timestamp: e.timestamp }));
+
+      let workedMs = 0;
+      for (let i = 0; i < events.length; i++) {
+        if (events[i].type === "in" && events[i + 1]?.type === "out") {
+          workedMs += events[i + 1].timestamp - events[i].timestamp;
         }
-        // Show if they have work time OR clocked out recently (within 3h)
-        if (workedMs > 0 || last.timestamp >= threeHoursAgo) {
-          result.push({ employeeId, employeeName, workedMs, lastOutTs: last.timestamp, shiftEvents: events });
-        }
+      }
+
+      const lastOut = events[events.length - 1];
+      const threeHoursAgo = now - 3 * 60 * 60 * 1000;
+
+      // Show if they have work time OR clocked out recently (within 3h)
+      if (workedMs > 0 || lastOut.timestamp >= threeHoursAgo) {
+        result.push({
+          employeeId: emp._id,
+          employeeName: emp.name,
+          workedMs,
+          lastOutTs: lastOut.timestamp,
+          shiftEvents: events,
+        });
       }
     }
     return result.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
