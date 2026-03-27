@@ -5,18 +5,71 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import PinPad from "@/components/PinPad";
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, Clock, Loader2, LogIn, LogOut } from "lucide-react";
+import { CheckCircle, Clock, Coffee, Loader2, LogIn, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Stage = "pin" | "lookup" | "confirm" | "submitting" | "success";
 
-function formatSince(ts: number): string {
-  const ms = Date.now() - ts;
+function formatDuration(ms: number): string {
   const totalMin = Math.floor(ms / 60000);
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+/** Compute cumulative work ms, break ms, and timeline segments from shift events */
+function computeShift(events: Array<{ type: "in" | "out"; timestamp: number }>) {
+  const now = Date.now();
+  let workMs = 0;
+  let breakMs = 0;
+  const segments: Array<{ type: "work" | "break"; start: number; end: number }> = [];
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.type === "in") {
+      // Work segment: from this "in" to next "out" or now
+      const end = events[i + 1]?.type === "out" ? events[i + 1].timestamp : now;
+      workMs += end - e.timestamp;
+      segments.push({ type: "work", start: e.timestamp, end });
+    } else if (e.type === "out") {
+      // Break segment: from this "out" to next "in" or now (if still on break — shouldn't happen for currently-in)
+      const nextIn = events[i + 1]?.type === "in" ? events[i + 1].timestamp : null;
+      if (nextIn) {
+        breakMs += nextIn - e.timestamp;
+        segments.push({ type: "break", start: e.timestamp, end: nextIn });
+      }
+    }
+  }
+
+  return { workMs, breakMs, segments };
+}
+
+/** Tiny visual bar showing work (green) and break (orange) segments */
+function ShiftBar({ segments }: { segments: Array<{ type: "work" | "break"; start: number; end: number }> }) {
+  if (segments.length === 0) return null;
+  const shiftStart = segments[0].start;
+  const shiftEnd = segments[segments.length - 1].end;
+  const total = shiftEnd - shiftStart;
+  if (total <= 0) return null;
+
+  return (
+    <div className="mt-3 h-2 rounded-full overflow-hidden bg-white/5 flex">
+      {segments.map((seg) => {
+        const pct = ((seg.end - seg.start) / total) * 100;
+        return (
+          <div
+            key={`${seg.type}-${seg.start}`}
+            className={cn(
+              "h-full",
+              seg.type === "work" ? "bg-emerald-500/70" : "bg-orange-400/70"
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        );
+      })}
+    </div>
+  );
 }
 
 export default function HomePage() {
@@ -190,20 +243,35 @@ export default function HomePage() {
         ) : currentlyIn.length === 0 ? (
           <span className="text-white/15 text-lg">Nobody clocked in</span>
         ) : (
-          currentlyIn.map((person) => (
-            <div
-              key={person.employeeId}
-              className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20"
-            >
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-xl font-light shrink-0">
-                {person.employeeName[0].toUpperCase()}
+          currentlyIn.map((person) => {
+            const shift = computeShift(person.shiftEvents ?? []);
+            return (
+              <div
+                key={person.employeeId}
+                className="px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-xl font-light shrink-0">
+                    {person.employeeName[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white/90 text-2xl font-bold truncate">{person.employeeName}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-emerald-400 text-sm font-mono">{formatDuration(shift.workMs)}</span>
+                      {shift.breakMs > 0 && (
+                        <span className="text-orange-400 text-sm font-mono flex items-center gap-1">
+                          <Coffee size={12} />
+                          {formatDuration(shift.breakMs)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* Timeline bar */}
+                <ShiftBar segments={shift.segments} />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white/90 text-2xl font-bold truncate">{person.employeeName}</p>
-                <p className="text-emerald-400/50 text-sm font-mono mt-0.5">{formatSince(person.since)}</p>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </>
@@ -228,18 +296,27 @@ export default function HomePage() {
           ) : currentlyIn.length === 0 ? (
             <span className="text-white/15 text-sm">Nobody clocked in</span>
           ) : (
-            currentlyIn.map((person) => (
-              <div
-                key={person.employeeId}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-950/40 border border-emerald-800/20"
-              >
-                <div className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-base font-light shrink-0">
-                  {person.employeeName[0].toUpperCase()}
+            currentlyIn.map((person) => {
+              const shift = computeShift(person.shiftEvents ?? []);
+              return (
+                <div
+                  key={person.employeeId}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-950/40 border border-emerald-800/20"
+                >
+                  <div className="w-9 h-9 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-base font-light shrink-0">
+                    {person.employeeName[0].toUpperCase()}
+                  </div>
+                  <span className="text-white/80 text-base font-light">{person.employeeName}</span>
+                  <span className="text-emerald-400/40 text-sm font-mono">{formatDuration(shift.workMs)}</span>
+                  {shift.breakMs > 0 && (
+                    <span className="text-orange-400/60 text-sm font-mono flex items-center gap-1">
+                      <Coffee size={11} />
+                      {formatDuration(shift.breakMs)}
+                    </span>
+                  )}
                 </div>
-                <span className="text-white/80 text-base font-light">{person.employeeName}</span>
-                <span className="text-emerald-400/40 text-sm font-mono">{formatSince(person.since)}</span>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
         <div className="h-px bg-white/8 mt-3" />

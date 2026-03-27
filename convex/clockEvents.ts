@@ -65,14 +65,25 @@ export const getEventsForEmployee = query({
   },
 });
 
-/** Returns all employees currently clocked in (last event = "in") */
+/** Returns all employees currently clocked in (last event = "in") with today's shift events */
 export const getCurrentlyIn = query({
   args: {},
   handler: async (ctx) => {
-    // Get all employees
     const employees = await ctx.db.query("employees").collect();
-    const result: Array<{ employeeId: string; employeeName: string; since: number }> = [];
+    const result: Array<{
+      employeeId: string;
+      employeeName: string;
+      since: number;
+      shiftEvents: Array<{ type: "in" | "out"; timestamp: number }>;
+    }> = [];
 
+    // Compute "shift day" date strings: today and yesterday (for shifts starting before midnight)
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const yesterday = new Date(now.getTime() - 86400000);
+    const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+    // Shift window: 6am today (local approx via UTC) — we send raw events, client computes with local time
     for (const emp of employees) {
       const last = await ctx.db
         .query("clockEvents")
@@ -80,7 +91,46 @@ export const getCurrentlyIn = query({
         .order("desc")
         .first();
       if (last && last.type === "in") {
-        result.push({ employeeId: emp._id, employeeName: emp.name, since: last.timestamp });
+        // Get today's + yesterday's events for this employee (to cover overnight shifts)
+        const todayEvents = await ctx.db
+          .query("clockEvents")
+          .withIndex("by_date", (q) => q.eq("date", todayStr))
+          .filter((q) => q.eq(q.field("employeeId"), emp._id))
+          .order("asc")
+          .collect();
+        const yesterdayEvents = await ctx.db
+          .query("clockEvents")
+          .withIndex("by_date", (q) => q.eq("date", yesterdayStr))
+          .filter((q) => q.eq(q.field("employeeId"), emp._id))
+          .order("asc")
+          .collect();
+
+        const allEvents = [...yesterdayEvents, ...todayEvents].sort(
+          (a, b) => a.timestamp - b.timestamp
+        );
+
+        // Trim to shift events: find the first "in" that starts this shift
+        // (walk backwards from the end to find the shift start)
+        const shiftEvents: Array<{ type: "in" | "out"; timestamp: number }> = [];
+        let shiftStartFound = false;
+        for (let i = allEvents.length - 1; i >= 0; i--) {
+          shiftEvents.unshift({ type: allEvents[i].type, timestamp: allEvents[i].timestamp });
+          if (allEvents[i].type === "in" && i > 0 && allEvents[i - 1]?.type !== "out") {
+            // This "in" has no preceding "out" — it's the shift start
+            shiftStartFound = true;
+            break;
+          }
+          if (i === 0) {
+            shiftStartFound = true;
+          }
+        }
+
+        result.push({
+          employeeId: emp._id,
+          employeeName: emp.name,
+          since: last.timestamp,
+          shiftEvents: shiftStartFound ? shiftEvents : [{ type: "in", timestamp: last.timestamp }],
+        });
       }
     }
     return result.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
