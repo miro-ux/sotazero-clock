@@ -46,9 +46,9 @@ function computeShift(events: Array<{ type: "in" | "out"; timestamp: number }>) 
 }
 
 /**
- * Radial clock showing work (green) and break (orange) as pie arcs.
- * Maps to a 12-hour clock face (720 min). Breaks only show orange
- * if a subsequent work segment exists (meaning they came back).
+ * Radial clock showing work/break segments at their real clock positions.
+ * 12h face: 12 at top (0°), 3 at right (90°), 6 at bottom (180°), 9 at left (270°).
+ * Breaks only show orange if followed by a subsequent work segment.
  */
 function ShiftClock({ workMs, segments }: {
   workMs: number;
@@ -57,74 +57,77 @@ function ShiftClock({ workMs, segments }: {
 }) {
   if (segments.length === 0 || workMs <= 0) return null;
 
-  const TOTAL_MIN = 720; // 12 hours
   const R = 20;
   const CX = 24;
   const CY = 24;
-  const circumference = 2 * Math.PI * R;
 
-  // Convert ms to minutes, capped at 720
-  const workMin = Math.min(workMs / 60000, TOTAL_MIN);
-  // Only count break if there's a work segment after it
-  let displayBreakMs = 0;
+  /** Convert a timestamp to degrees on a 12h clock (12=0°, 3=90°, 6=180°, 9=270°) */
+  function tsToDeg(ts: number): number {
+    const d = new Date(ts);
+    const h = d.getHours() % 12;
+    const m = d.getMinutes();
+    return (h * 30) + (m * 0.5); // 360° / 12h = 30°/h, 0.5°/min
+  }
+
+  /** SVG arc path from startDeg to endDeg (clockwise) */
+  function arcPath(startDeg: number, endDeg: number): string {
+    let sweep = endDeg - startDeg;
+    if (sweep <= 0) sweep += 360;
+    if (sweep > 360) sweep = 360;
+
+    const startRad = (startDeg - 90) * (Math.PI / 180);
+    const endRad = (startDeg + sweep - 90) * (Math.PI / 180);
+    const x1 = CX + R * Math.cos(startRad);
+    const y1 = CY + R * Math.sin(startRad);
+    const x2 = CX + R * Math.cos(endRad);
+    const y2 = CY + R * Math.sin(endRad);
+    const largeArc = sweep > 180 ? 1 : 0;
+
+    return `M ${x1} ${y1} A ${R} ${R} 0 ${largeArc} 1 ${x2} ${y2}`;
+  }
+
+  // Build arcs for each segment
+  const arcs: Array<{ path: string; color: string }> = [];
   for (let i = 0; i < segments.length; i++) {
-    if (segments[i].type === "break") {
-      // Check if there's a subsequent work segment
-      const hasNext = segments.slice(i + 1).some(s => s.type === "work");
-      if (hasNext) displayBreakMs += segments[i].end - segments[i].start;
+    const seg = segments[i];
+    if (seg.type === "work") {
+      arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#34d399" });
+    } else if (seg.type === "break") {
+      // Only show break in orange if there's a subsequent work segment
+      const hasNextWork = segments.slice(i + 1).some(s => s.type === "work");
+      if (hasNextWork) {
+        arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#fb923c" });
+      }
     }
   }
-  const breakMin = Math.min(displayBreakMs / 60000, TOTAL_MIN - workMin);
-
-  const workFrac = workMin / TOTAL_MIN;
-  const breakFrac = breakMin / TOTAL_MIN;
-
-  // SVG arc: start at 12 o'clock (-90deg). Work arc first, then break arc after it.
-  const workLen = circumference * workFrac;
-  const breakLen = circumference * breakFrac;
-  const workOffset = 0; // starts at top
-  const breakOffset = circumference - workLen; // gap = rest of circle minus work
 
   return (
     <svg width="48" height="48" viewBox="0 0 48 48" className="shrink-0" role="img" aria-label="Shift clock">
       {/* Background ring */}
       <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-      {/* Work arc (green) */}
-      <circle
-        cx={CX} cy={CY} r={R}
-        fill="none"
-        stroke="#34d399"
-        strokeWidth="5"
-        strokeDasharray={`${workLen} ${circumference - workLen}`}
-        strokeDashoffset={workOffset}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${CX} ${CY})`}
-        style={{ opacity: 0.8 }}
-      />
-      {/* Break arc (orange) — only if visible */}
-      {breakLen > 0 && (
-        <circle
-          cx={CX} cy={CY} r={R}
+      {/* Segment arcs */}
+      {arcs.map((arc) => (
+        <path
+          key={arc.path}
+          d={arc.path}
           fill="none"
-          stroke="#fb923c"
+          stroke={arc.color}
           strokeWidth="5"
-          strokeDasharray={`${breakLen} ${circumference - breakLen}`}
-          strokeDashoffset={breakOffset}
           strokeLinecap="round"
-          transform={`rotate(-90 ${CX} ${CY})`}
           style={{ opacity: 0.8 }}
         />
-      )}
-      {/* 12 hour tick marks */}
+      ))}
+      {/* 12 hour tick marks — 12 at top, 3 at right, 6 at bottom, 9 at left */}
       {Array.from({ length: 12 }).map((_, i) => {
-        const angle = (i * 30 - 90) * (Math.PI / 180);
-        const x1 = CX + (R + 2) * Math.cos(angle);
-        const y1 = CY + (R + 2) * Math.sin(angle);
-        const x2 = CX + (R - 1) * Math.cos(angle);
-        const y2 = CY + (R - 1) * Math.sin(angle);
+        const deg = i * 30; // 0=12, 90=3, 180=6, 270=9
+        const rad = (deg - 90) * (Math.PI / 180);
+        const x1 = CX + (R + 2) * Math.cos(rad);
+        const y1 = CY + (R + 2) * Math.sin(rad);
+        const x2 = CX + (R - 1) * Math.cos(rad);
+        const y2 = CY + (R - 1) * Math.sin(rad);
         return (
           <line
-            key={`t${i * 30}`}
+            key={`t${deg}`}
             x1={x1} y1={y1} x2={x2} y2={y2}
             stroke="rgba(255,255,255,0.15)"
             strokeWidth={i % 3 === 0 ? 1.5 : 0.5}
