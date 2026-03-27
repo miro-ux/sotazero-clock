@@ -80,9 +80,9 @@ export default function PinPad({
   }, [handleDigit, handleBackspace, onBack]);
 
   const dotColor = {
-    emerald: "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]",
-    rose: "bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.5)]",
-    blue: "bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]",
+    emerald: "bg-emerald-400 shadow-[0_0_14px_4px_rgba(52,211,153,0.45),0_0_30px_8px_rgba(52,211,153,0.15)]",
+    rose: "bg-rose-400 shadow-[0_0_14px_4px_rgba(251,113,133,0.45),0_0_30px_8px_rgba(251,113,133,0.15)]",
+    blue: "bg-blue-400 shadow-[0_0_14px_4px_rgba(96,165,250,0.45),0_0_30px_8px_rgba(96,165,250,0.15)]",
   }[accentColor];
 
   const dotEmpty = {
@@ -113,12 +113,12 @@ export default function PinPad({
           <div
             key={i}
             className={cn(
-              "w-5 h-5 rounded-full border-2 transition-all duration-150",
+              "w-5 h-5 rounded-full border-2 transition-all duration-200",
               digits.length > i
-                ? `${dotColor} border-transparent scale-110`
+                ? `${dotColor} border-transparent scale-125 dot-pop`
                 : error
                 ? "border-red-500/60 bg-red-500/20"
-                : `${dotEmpty} bg-transparent`
+                : `${dotEmpty} bg-transparent scale-100`
             )}
           />
         ))}
@@ -173,7 +173,7 @@ function PadButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "pad-btn h-20 md:h-24 rounded-2xl text-2xl font-light text-white/80 flex items-center justify-center transition-all",
+        "pad-btn pad-ripple h-20 md:h-24 rounded-2xl text-2xl font-light text-white/80 flex items-center justify-center transition-all relative overflow-hidden",
         activeClass,
         "disabled:opacity-30 disabled:cursor-not-allowed"
       )}
