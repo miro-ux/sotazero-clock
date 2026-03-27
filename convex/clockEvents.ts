@@ -65,20 +65,32 @@ export const getEventsForEmployee = query({
   },
 });
 
-/** Returns employees who worked today but are currently clocked out */
+/** Returns employees who worked today but are currently clocked out.
+ *  A "shift day" runs from 6am today to 3am tomorrow.
+ *  Accepts today + yesterday date strings to cover early morning events. */
 export const getClockedOutToday = query({
-  args: { date: v.string() },
-  handler: async (ctx, { date }) => {
-    // Get all events for today
+  args: { todayDate: v.string(), yesterdayDate: v.string(), shiftStartTs: v.number() },
+  handler: async (ctx, { todayDate, yesterdayDate, shiftStartTs }) => {
+    // Fetch events from both calendar dates
     const todayEvents = await ctx.db
       .query("clockEvents")
-      .withIndex("by_date", (q) => q.eq("date", date))
+      .withIndex("by_date", (q) => q.eq("date", todayDate))
+      .order("asc")
+      .collect();
+    const yesterdayEvents = await ctx.db
+      .query("clockEvents")
+      .withIndex("by_date", (q) => q.eq("date", yesterdayDate))
       .order("asc")
       .collect();
 
+    // Merge and filter to shift window (>= shiftStartTs)
+    const allEvents = [...yesterdayEvents, ...todayEvents]
+      .filter((e) => e.timestamp >= shiftStartTs)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
     // Group by employee
     const byEmployee = new Map<string, { employeeName: string; events: Array<{ type: "in" | "out"; timestamp: number }> }>();
-    for (const e of todayEvents) {
+    for (const e of allEvents) {
       const existing = byEmployee.get(e.employeeId);
       if (existing) {
         existing.events.push({ type: e.type, timestamp: e.timestamp });
@@ -87,11 +99,12 @@ export const getClockedOutToday = query({
       }
     }
 
-    // Filter to employees whose last event is "out"
+    // Filter: last event is "out" AND has actual work time
     const result: Array<{
       employeeId: string;
       employeeName: string;
       workedMs: number;
+      lastOutTs: number;
       shiftEvents: Array<{ type: "in" | "out"; timestamp: number }>;
     }> = [];
     for (const [employeeId, { employeeName, events }] of byEmployee) {
@@ -103,7 +116,9 @@ export const getClockedOutToday = query({
             workedMs += events[i + 1].timestamp - events[i].timestamp;
           }
         }
-        result.push({ employeeId, employeeName, workedMs, shiftEvents: events });
+        if (workedMs > 0) {
+          result.push({ employeeId, employeeName, workedMs, lastOutTs: last.timestamp, shiftEvents: events });
+        }
       }
     }
     return result.sort((a, b) => a.employeeName.localeCompare(b.employeeName));

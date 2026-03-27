@@ -138,15 +138,39 @@ function ShiftClock({ workMs, segments }: {
   );
 }
 
-function todayDateStr(): string {
-  const d = new Date();
-  return d.toISOString().split("T")[0];
+/** Compute shift day params: 6am today to 3am tomorrow.
+ *  If current time is before 3am, the "shift day" is actually yesterday's. */
+function shiftDayParams() {
+  const now = new Date();
+  const hour = now.getHours();
+
+  // Before 3am: we're still in yesterday's shift day
+  const shiftDate = hour < 3
+    ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+    : now;
+
+  const todayStr = shiftDate.toISOString().split("T")[0];
+  const yesterday = new Date(shiftDate.getTime() - 86400000);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+  // Shift starts at 6am on the shift date
+  const shiftStart = new Date(shiftDate);
+  shiftStart.setHours(6, 0, 0, 0);
+
+  return { todayDate: todayStr, yesterdayDate: yesterdayStr, shiftStartTs: shiftStart.getTime() };
+}
+
+function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 export default function HomePage() {
   const router = useRouter();
   const currentlyIn = useQuery(api.clockEvents.getCurrentlyIn);
-  const clockedOutToday = useQuery(api.clockEvents.getClockedOutToday, { date: todayDateStr() });
+  const clockedOutToday = useQuery(api.clockEvents.getClockedOutToday, shiftDayParams());
 
   const [stage, setStage] = useState<Stage>("pin");
   const [pin, setPin] = useState("");
@@ -376,6 +400,7 @@ export default function HomePage() {
                             {formatDuration(shift.breakMs)}
                           </span>
                         )}
+                        <span className="text-white/30 text-xs font-mono">out {fmtTime(person.lastOutTs)}</span>
                       </div>
                     </div>
                     <ShiftClock workMs={shift.workMs} segments={shift.segments} />
@@ -451,7 +476,7 @@ export default function HomePage() {
           key={pinError ? "error" : "normal"}
           onComplete={handlePinComplete}
           error={pinError}
-          accentColor="blue"
+          accentColor="emerald"
         />
       </div>
     </div>
