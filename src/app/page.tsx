@@ -45,30 +45,93 @@ function computeShift(events: Array<{ type: "in" | "out"; timestamp: number }>) 
   return { workMs, breakMs, segments };
 }
 
-/** Tiny visual bar showing work (green) and break (orange) segments */
-function ShiftBar({ segments }: { segments: Array<{ type: "work" | "break"; start: number; end: number }> }) {
-  if (segments.length === 0) return null;
-  const shiftStart = segments[0].start;
-  const shiftEnd = segments[segments.length - 1].end;
-  const total = shiftEnd - shiftStart;
-  if (total <= 0) return null;
+/**
+ * Radial clock showing work (green) and break (orange) as pie arcs.
+ * Maps to a 12-hour clock face (720 min). Breaks only show orange
+ * if a subsequent work segment exists (meaning they came back).
+ */
+function ShiftClock({ workMs, segments }: {
+  workMs: number;
+  breakMs?: number;
+  segments: Array<{ type: "work" | "break"; start: number; end: number }>;
+}) {
+  if (segments.length === 0 || workMs <= 0) return null;
+
+  const TOTAL_MIN = 720; // 12 hours
+  const R = 20;
+  const CX = 24;
+  const CY = 24;
+  const circumference = 2 * Math.PI * R;
+
+  // Convert ms to minutes, capped at 720
+  const workMin = Math.min(workMs / 60000, TOTAL_MIN);
+  // Only count break if there's a work segment after it
+  let displayBreakMs = 0;
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i].type === "break") {
+      // Check if there's a subsequent work segment
+      const hasNext = segments.slice(i + 1).some(s => s.type === "work");
+      if (hasNext) displayBreakMs += segments[i].end - segments[i].start;
+    }
+  }
+  const breakMin = Math.min(displayBreakMs / 60000, TOTAL_MIN - workMin);
+
+  const workFrac = workMin / TOTAL_MIN;
+  const breakFrac = breakMin / TOTAL_MIN;
+
+  // SVG arc: start at 12 o'clock (-90deg). Work arc first, then break arc after it.
+  const workLen = circumference * workFrac;
+  const breakLen = circumference * breakFrac;
+  const workOffset = 0; // starts at top
+  const breakOffset = circumference - workLen; // gap = rest of circle minus work
 
   return (
-    <div className="mt-3 h-2 rounded-full overflow-hidden bg-white/5 flex">
-      {segments.map((seg) => {
-        const pct = ((seg.end - seg.start) / total) * 100;
+    <svg width="48" height="48" viewBox="0 0 48 48" className="shrink-0" role="img" aria-label="Shift clock">
+      {/* Background ring */}
+      <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+      {/* Work arc (green) */}
+      <circle
+        cx={CX} cy={CY} r={R}
+        fill="none"
+        stroke="#34d399"
+        strokeWidth="5"
+        strokeDasharray={`${workLen} ${circumference - workLen}`}
+        strokeDashoffset={workOffset}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${CX} ${CY})`}
+        style={{ opacity: 0.8 }}
+      />
+      {/* Break arc (orange) — only if visible */}
+      {breakLen > 0 && (
+        <circle
+          cx={CX} cy={CY} r={R}
+          fill="none"
+          stroke="#fb923c"
+          strokeWidth="5"
+          strokeDasharray={`${breakLen} ${circumference - breakLen}`}
+          strokeDashoffset={breakOffset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${CX} ${CY})`}
+          style={{ opacity: 0.8 }}
+        />
+      )}
+      {/* 12 hour tick marks */}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const angle = (i * 30 - 90) * (Math.PI / 180);
+        const x1 = CX + (R + 2) * Math.cos(angle);
+        const y1 = CY + (R + 2) * Math.sin(angle);
+        const x2 = CX + (R - 1) * Math.cos(angle);
+        const y2 = CY + (R - 1) * Math.sin(angle);
         return (
-          <div
-            key={`${seg.type}-${seg.start}`}
-            className={cn(
-              "h-full",
-              seg.type === "work" ? "bg-emerald-500/70" : "bg-orange-400/70"
-            )}
-            style={{ width: `${pct}%` }}
+          <line
+            key={`t${i * 30}`}
+            x1={x1} y1={y1} x2={x2} y2={y2}
+            stroke="rgba(255,255,255,0.15)"
+            strokeWidth={i % 3 === 0 ? 1.5 : 0.5}
           />
         );
       })}
-    </div>
+    </svg>
   );
 }
 
@@ -272,9 +335,8 @@ export default function HomePage() {
                       )}
                     </div>
                   </div>
+                  <ShiftClock workMs={shift.workMs} segments={shift.segments} />
                 </div>
-                {/* Timeline bar */}
-                <ShiftBar segments={shift.segments} />
               </div>
             );
           })
@@ -289,7 +351,7 @@ export default function HomePage() {
             <LogOut size={18} className="text-white/30" />
             <span className="text-white/30 text-sm uppercase tracking-widest">Clocked Out</span>
           </div>
-          <div className="flex flex-col gap-2 opacity-50 grayscale">
+          <div className="flex flex-col gap-2" style={{ filter: "saturate(0.5)", opacity: 0.5 }}>
             {clockedOutToday.map((person) => {
               const shift = computeShift(person.shiftEvents ?? []);
               return (
@@ -303,10 +365,18 @@ export default function HomePage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-white/90 text-2xl font-bold truncate">{person.employeeName}</p>
-                      <span className="text-emerald-400 text-sm font-mono">{formatDuration(person.workedMs)}</span>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-emerald-400 text-sm font-mono">{formatDuration(shift.workMs)}</span>
+                        {shift.breakMs > 0 && (
+                          <span className="text-orange-400 text-sm font-mono flex items-center gap-1">
+                            <Coffee size={12} />
+                            {formatDuration(shift.breakMs)}
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    <ShiftClock workMs={shift.workMs} segments={shift.segments} />
                   </div>
-                  <ShiftBar segments={shift.segments} />
                 </div>
               );
             })}
