@@ -73,6 +73,7 @@ export const getClockedOutToday = query({
   handler: async (ctx, { shiftStartTs }) => {
     const employees = await ctx.db.query("employees").collect();
     const now = Date.now();
+    const threeHoursAgo = now - 3 * 60 * 60 * 1000;
     const result: Array<{
       employeeId: string;
       employeeName: string;
@@ -89,20 +90,21 @@ export const getClockedOutToday = query({
         .order("desc")
         .first();
       if (!globalLast || globalLast.type !== "out") continue;
+      // Quick check: if last clock-out is older than shift start AND older than 3h, skip
+      if (globalLast.timestamp < shiftStartTs && globalLast.timestamp < threeHoursAgo) continue;
 
-      // Get all events for this employee, recent first, collect those in the shift window
-      const recentEvents = await ctx.db
+      // Get recent events for this employee (last 50, desc) then filter to shift window
+      const allEmployeeEvents = await ctx.db
         .query("clockEvents")
-        .filter((q) => q.and(
-          q.eq(q.field("employeeId"), emp._id),
-          q.gte(q.field("timestamp"), shiftStartTs)
-        ))
-        .order("asc")
-        .collect();
+        .filter((q) => q.eq(q.field("employeeId"), emp._id))
+        .order("desc")
+        .take(50);
 
-      if (recentEvents.length === 0) continue;
-
-      const events = recentEvents.map((e) => ({ type: e.type, timestamp: e.timestamp }));
+      // Filter to shift window and sort asc
+      const events = allEmployeeEvents
+        .filter((e) => e.timestamp >= shiftStartTs)
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map((e) => ({ type: e.type, timestamp: e.timestamp }));
 
       let workedMs = 0;
       for (let i = 0; i < events.length; i++) {
@@ -111,16 +113,13 @@ export const getClockedOutToday = query({
         }
       }
 
-      const lastOut = events[events.length - 1];
-      const threeHoursAgo = now - 3 * 60 * 60 * 1000;
-
       // Show if they have work time OR clocked out recently (within 3h)
-      if (workedMs > 0 || lastOut.timestamp >= threeHoursAgo) {
+      if (workedMs > 0 || globalLast.timestamp >= threeHoursAgo) {
         result.push({
           employeeId: emp._id,
           employeeName: emp.name,
           workedMs,
-          lastOutTs: lastOut.timestamp,
+          lastOutTs: globalLast.timestamp,
           shiftEvents: events,
         });
       }
