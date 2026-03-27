@@ -87,16 +87,15 @@ function ShiftClock({ workMs, segments }: {
   }
 
   // Build arcs for each segment
-  const arcs: Array<{ path: string; color: string }> = [];
+  const arcs: Array<{ path: string; color: string; key: string }> = [];
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     if (seg.type === "work") {
-      arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#34d399" });
+      arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#34d399", key: `w-${seg.start}` });
     } else if (seg.type === "break") {
-      // Only show break in orange if there's a subsequent work segment
       const hasNextWork = segments.slice(i + 1).some(s => s.type === "work");
       if (hasNextWork) {
-        arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#fb923c" });
+        arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#fb923c", key: `b-${seg.start}` });
       }
     }
   }
@@ -108,7 +107,7 @@ function ShiftClock({ workMs, segments }: {
       {/* Segment arcs */}
       {arcs.map((arc) => (
         <path
-          key={arc.path}
+          key={arc.key}
           d={arc.path}
           fill="none"
           stroke={arc.color}

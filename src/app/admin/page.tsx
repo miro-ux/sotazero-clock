@@ -139,15 +139,15 @@ function ShiftClock({ workMs, segments, size = 80 }: {
     return `M ${x1} ${y1} A ${R} ${R} 0 ${largeArc} 1 ${x2} ${y2}`;
   }
 
-  const arcs: Array<{ path: string; color: string }> = [];
+  const arcs: Array<{ path: string; color: string; key: string }> = [];
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     if (seg.type === "work") {
-      arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#34d399" });
+      arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#34d399", key: `w-${seg.start}` });
     } else if (seg.type === "break") {
       const hasNextWork = segments.slice(i + 1).some(s => s.type === "work");
       if (hasNextWork) {
-        arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#fb923c" });
+        arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#fb923c", key: `b-${seg.start}` });
       }
     }
   }
@@ -156,7 +156,7 @@ function ShiftClock({ workMs, segments, size = 80 }: {
     <svg width={size} height={size} viewBox="0 0 80 80" className="shrink-0" role="img" aria-label="Shift clock">
       <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
       {arcs.map((arc) => (
-        <path key={arc.path} d={arc.path} fill="none" stroke={arc.color} strokeWidth="7" strokeLinecap="round" style={{ opacity: 0.8 }} />
+        <path key={arc.key} d={arc.path} fill="none" stroke={arc.color} strokeWidth="7" strokeLinecap="round" style={{ opacity: 0.8 }} />
       ))}
       {Array.from({ length: 12 }).map((_, i) => {
         const deg = i * 30;
