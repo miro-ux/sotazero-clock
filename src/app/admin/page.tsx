@@ -198,7 +198,12 @@ function buildSummary(
       const workedMs = calcWorkedMs(evts);
       return { name, employeeId, lastType, workedMs, eventCount: evts.length, sortedEvents: sorted };
     })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      // Clocked-in first, then alphabetical
+      if (a.lastType === "in" && b.lastType !== "in") return -1;
+      if (a.lastType !== "in" && b.lastType === "in") return 1;
+      return a.name.localeCompare(b.name);
+    });
 }
 
 export default function AdminPage() {
@@ -361,7 +366,7 @@ export default function AdminPage() {
           <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-lg font-light shrink-0">
             {selectedEmployee.name[0].toUpperCase()}
           </div>
-          <span className="text-white/80 text-lg font-light">{selectedEmployee.name}</span>
+          <span className="text-white/80 text-lg font-bold">{selectedEmployee.name}</span>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-8">
@@ -509,7 +514,7 @@ export default function AdminPage() {
                         {name[0].toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white/90 text-lg font-light">{name}</p>
+                        <p className="text-white/90 text-lg font-bold">{name}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Timer size={13} className="text-white/30 shrink-0" />
                           <span className="text-emerald-400/70 text-sm font-mono">{formatDuration(workedMs)}</span>
@@ -579,7 +584,7 @@ export default function AdminPage() {
                       {emp.name[0].toUpperCase()}
                     </div>
                     <div className="flex-1">
-                      <p className="text-white/90 text-lg font-light">{emp.name}</p>
+                      <p className="text-white/90 text-lg font-bold">{emp.name}</p>
                       {emp.isAdmin && (
                         <span className="text-blue-400/70 text-xs flex items-center gap-1 mt-0.5">
                           <Shield size={10} /> Admin

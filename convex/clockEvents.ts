@@ -112,6 +112,14 @@ export const getClockedOutToday = query({
     for (const [employeeId, { employeeName, events }] of byEmployee) {
       const last = events[events.length - 1];
       if (last.type === "out") {
+        // Check global last event — if they clocked back in after, skip them
+        const globalLast = await ctx.db
+          .query("clockEvents")
+          .filter((q) => q.eq(q.field("employeeId"), employeeId))
+          .order("desc")
+          .first();
+        if (globalLast && globalLast.type === "in") continue;
+
         let workedMs = 0;
         for (let i = 0; i < events.length; i++) {
           if (events[i].type === "in" && events[i + 1]?.type === "out") {
