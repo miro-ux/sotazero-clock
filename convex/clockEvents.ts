@@ -99,7 +99,9 @@ export const getClockedOutToday = query({
       }
     }
 
-    // Filter: last event is "out" AND has actual work time
+    // Filter: last event is "out" AND (has work time OR clocked out within last 3h)
+    const now = Date.now();
+    const threeHoursAgo = now - 3 * 60 * 60 * 1000;
     const result: Array<{
       employeeId: string;
       employeeName: string;
@@ -116,7 +118,8 @@ export const getClockedOutToday = query({
             workedMs += events[i + 1].timestamp - events[i].timestamp;
           }
         }
-        if (workedMs > 0) {
+        // Show if they have work time OR clocked out recently (within 3h)
+        if (workedMs > 0 || last.timestamp >= threeHoursAgo) {
           result.push({ employeeId, employeeName, workedMs, lastOutTs: last.timestamp, shiftEvents: events });
         }
       }

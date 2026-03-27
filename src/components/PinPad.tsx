@@ -58,6 +58,27 @@ export default function PinPad({
     setDigits((prev) => prev.slice(0, -1));
   }, [loading]);
 
+  // Keyboard support: number keys, numpad, backspace, escape
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handleDigit(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === "Escape" && onBack) {
+        e.preventDefault();
+        onBack();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleDigit, handleBackspace, onBack]);
+
   const dotColor = {
     emerald: "bg-emerald-400",
     rose: "bg-rose-400",
