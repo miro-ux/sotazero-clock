@@ -460,7 +460,7 @@ export default function HomePage() {
       </div>
 
       {/* Desktop: left sidebar */}
-      <div className="hidden md:flex flex-col w-80 lg:w-96 shrink-0 border-r border-white/8 p-6 lg:p-8">
+      <div className="hidden md:flex flex-col w-96 lg:w-[28rem] shrink-0 border-r border-white/8 p-6 lg:p-8">
         {currentlyInPanel}
       </div>
 

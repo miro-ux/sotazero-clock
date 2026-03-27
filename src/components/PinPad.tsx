@@ -80,9 +80,15 @@ export default function PinPad({
   }, [handleDigit, handleBackspace, onBack]);
 
   const dotColor = {
-    emerald: "bg-emerald-400",
-    rose: "bg-rose-400",
-    blue: "bg-blue-400",
+    emerald: "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]",
+    rose: "bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.5)]",
+    blue: "bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]",
+  }[accentColor];
+
+  const dotEmpty = {
+    emerald: "border-emerald-500/25",
+    rose: "border-rose-500/25",
+    blue: "border-blue-500/25",
   }[accentColor];
 
   const btnActive = {
@@ -112,7 +118,7 @@ export default function PinPad({
                 ? `${dotColor} border-transparent scale-110`
                 : error
                 ? "border-red-500/60 bg-red-500/20"
-                : "border-white/20 bg-transparent"
+                : `${dotEmpty} bg-transparent`
             )}
           />
         ))}
@@ -167,7 +173,7 @@ function PadButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "h-20 md:h-24 rounded-2xl bg-white/8 hover:bg-white/12 transition-colors text-2xl font-light text-white/80 flex items-center justify-center",
+        "pad-btn h-20 md:h-24 rounded-2xl text-2xl font-light text-white/80 flex items-center justify-center transition-all",
         activeClass,
         "disabled:opacity-30 disabled:cursor-not-allowed"
       )}
