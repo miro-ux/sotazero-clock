@@ -88,18 +88,22 @@ export const getClockedOutToday = query({
     }
 
     // Filter to employees whose last event is "out"
-    const result: Array<{ employeeId: string; employeeName: string; workedMs: number }> = [];
+    const result: Array<{
+      employeeId: string;
+      employeeName: string;
+      workedMs: number;
+      shiftEvents: Array<{ type: "in" | "out"; timestamp: number }>;
+    }> = [];
     for (const [employeeId, { employeeName, events }] of byEmployee) {
       const last = events[events.length - 1];
       if (last.type === "out") {
-        // Calculate worked time
         let workedMs = 0;
         for (let i = 0; i < events.length; i++) {
           if (events[i].type === "in" && events[i + 1]?.type === "out") {
             workedMs += events[i + 1].timestamp - events[i].timestamp;
           }
         }
-        result.push({ employeeId, employeeName, workedMs });
+        result.push({ employeeId, employeeName, workedMs, shiftEvents: events });
       }
     }
     return result.sort((a, b) => a.employeeName.localeCompare(b.employeeName));

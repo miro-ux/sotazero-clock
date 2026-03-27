@@ -286,22 +286,28 @@ export default function HomePage() {
         <>
           <div className="h-px bg-white/8 my-4" />
           <div className="flex items-center gap-3 mb-4">
-            <LogOut size={18} className="text-rose-400/70" />
+            <LogOut size={18} className="text-orange-400/70" />
             <span className="text-white/30 text-sm uppercase tracking-widest">Clocked Out</span>
           </div>
           <div className="flex flex-col gap-2">
-            {clockedOutToday.map((person) => (
-              <div
-                key={person.employeeId}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-rose-950/20 border border-rose-800/15"
-              >
-                <div className="w-10 h-10 rounded-full bg-rose-500/15 flex items-center justify-center text-rose-300/70 text-base font-light shrink-0">
-                  {person.employeeName[0].toUpperCase()}
+            {clockedOutToday.map((person) => {
+              const shift = computeShift(person.shiftEvents ?? []);
+              return (
+                <div
+                  key={person.employeeId}
+                  className="px-4 py-3 rounded-xl bg-orange-950/20 border border-orange-800/15"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-orange-500/15 flex items-center justify-center text-orange-300/70 text-base font-light shrink-0">
+                      {person.employeeName[0].toUpperCase()}
+                    </div>
+                    <p className="text-white/50 text-lg font-light truncate flex-1">{person.employeeName}</p>
+                    <span className="text-orange-400/50 text-sm font-mono">{formatDuration(person.workedMs)}</span>
+                  </div>
+                  <ShiftBar segments={shift.segments} />
                 </div>
-                <p className="text-white/50 text-lg font-light truncate flex-1">{person.employeeName}</p>
-                <span className="text-rose-400/50 text-sm font-mono">{formatDuration(person.workedMs)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
