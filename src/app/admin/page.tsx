@@ -84,6 +84,95 @@ function formatDuration(ms: number): string {
   return parts.join(" ");
 }
 
+/** Compute cumulative work ms, break ms, and timeline segments from shift events */
+function computeShift(events: Array<{ type: "in" | "out"; timestamp: number }>) {
+  const now = Date.now();
+  let workMs = 0;
+  let breakMs = 0;
+  const segments: Array<{ type: "work" | "break"; start: number; end: number }> = [];
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.type === "in") {
+      const end = events[i + 1]?.type === "out" ? events[i + 1].timestamp : now;
+      workMs += end - e.timestamp;
+      segments.push({ type: "work", start: e.timestamp, end });
+    } else if (e.type === "out") {
+      const nextIn = events[i + 1]?.type === "in" ? events[i + 1].timestamp : null;
+      if (nextIn) {
+        breakMs += nextIn - e.timestamp;
+        segments.push({ type: "break", start: e.timestamp, end: nextIn });
+      }
+    }
+  }
+  return { workMs, breakMs, segments };
+}
+
+/** Radial clock showing work/break segments at real clock positions (larger version for admin). */
+function ShiftClock({ workMs, segments, size = 80 }: {
+  workMs: number;
+  segments: Array<{ type: "work" | "break"; start: number; end: number }>;
+  size?: number;
+}) {
+  if (segments.length === 0 || workMs <= 0) return null;
+  const R = 32;
+  const CX = 40;
+  const CY = 40;
+
+  function tsToDeg(ts: number): number {
+    const d = new Date(ts);
+    const h = d.getHours() % 12;
+    const m = d.getMinutes();
+    return (h * 30) + (m * 0.5);
+  }
+
+  function arcPath(startDeg: number, endDeg: number): string {
+    let sweep = endDeg - startDeg;
+    if (sweep <= 0) sweep += 360;
+    if (sweep > 360) sweep = 360;
+    const startRad = (startDeg - 90) * (Math.PI / 180);
+    const endRad = (startDeg + sweep - 90) * (Math.PI / 180);
+    const x1 = CX + R * Math.cos(startRad);
+    const y1 = CY + R * Math.sin(startRad);
+    const x2 = CX + R * Math.cos(endRad);
+    const y2 = CY + R * Math.sin(endRad);
+    const largeArc = sweep > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${R} ${R} 0 ${largeArc} 1 ${x2} ${y2}`;
+  }
+
+  const arcs: Array<{ path: string; color: string }> = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (seg.type === "work") {
+      arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#34d399" });
+    } else if (seg.type === "break") {
+      const hasNextWork = segments.slice(i + 1).some(s => s.type === "work");
+      if (hasNextWork) {
+        arcs.push({ path: arcPath(tsToDeg(seg.start), tsToDeg(seg.end)), color: "#fb923c" });
+      }
+    }
+  }
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 80 80" className="shrink-0" role="img" aria-label="Shift clock">
+      <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
+      {arcs.map((arc) => (
+        <path key={arc.path} d={arc.path} fill="none" stroke={arc.color} strokeWidth="7" strokeLinecap="round" style={{ opacity: 0.8 }} />
+      ))}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const deg = i * 30;
+        const rad = (deg - 90) * (Math.PI / 180);
+        const x1 = CX + (R + 3) * Math.cos(rad);
+        const y1 = CY + (R + 3) * Math.sin(rad);
+        const x2 = CX + (R - 2) * Math.cos(rad);
+        const y2 = CY + (R - 2) * Math.sin(rad);
+        return (
+          <line key={`t${deg}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,0.15)" strokeWidth={i % 3 === 0 ? 2 : 0.7} />
+        );
+      })}
+    </svg>
+  );
+}
+
 /** Group events by employee name and compute worked time + last status */
 function buildSummary(
   events: Array<{ employeeId: Id<"employees">; employeeName: string; type: "in" | "out"; timestamp: number }>
@@ -107,7 +196,7 @@ function buildSummary(
       const sorted = [...evts].sort((a, b) => a.timestamp - b.timestamp);
       const lastType = sorted[sorted.length - 1]?.type ?? null;
       const workedMs = calcWorkedMs(evts);
-      return { name, employeeId, lastType, workedMs, eventCount: evts.length };
+      return { name, employeeId, lastType, workedMs, eventCount: evts.length, sortedEvents: sorted };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -407,7 +496,9 @@ export default function AdminPage() {
               <>
                 {/* Per-person summary cards */}
                 <div className="space-y-3 mb-8">
-                  {summary.map(({ name, employeeId, lastType, workedMs, eventCount }) => (
+                  {summary.map(({ name, employeeId, lastType, workedMs, eventCount, sortedEvents }) => {
+                    const shift = computeShift(sortedEvents);
+                    return (
                     <button
                       type="button"
                       key={name}
@@ -421,10 +512,14 @@ export default function AdminPage() {
                         <p className="text-white/90 text-lg font-light">{name}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Timer size={13} className="text-white/30 shrink-0" />
-                          <span className="text-white/50 text-sm font-mono">{formatDuration(workedMs)}</span>
-                          <span className="text-white/20 text-xs ml-1">({eventCount} events)</span>
+                          <span className="text-emerald-400/70 text-sm font-mono">{formatDuration(workedMs)}</span>
+                          {shift.breakMs > 0 && (
+                            <span className="text-orange-400/70 text-sm font-mono">{formatDuration(shift.breakMs)}</span>
+                          )}
+                          <span className="text-white/20 text-xs ml-1">({eventCount})</span>
                         </div>
                       </div>
+                      <ShiftClock workMs={shift.workMs} segments={shift.segments} />
                       <span
                         className={cn(
                           "text-xs uppercase tracking-widest px-3 py-1.5 rounded-full font-medium shrink-0",
@@ -436,7 +531,8 @@ export default function AdminPage() {
                         {lastType === "in" ? "In" : "Out"}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Raw event log */}
