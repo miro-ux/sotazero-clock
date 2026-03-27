@@ -65,15 +65,14 @@ export const getEventsForEmployee = query({
   },
 });
 
-/** Returns employees currently clocked out who had activity today.
- *  Uses shiftStartTs (6am local) as the cutoff — only events after that count.
- *  Scans all employees, checks their global last event. */
+/** Returns employees currently clocked out who worked recently.
+ *  Walks backwards from the last clock-out to reconstruct the shift. */
 export const getClockedOutToday = query({
   args: { shiftStartTs: v.number() },
-  handler: async (ctx, { shiftStartTs }) => {
+  handler: async (ctx, { shiftStartTs: _shiftStartTs }) => {
     const employees = await ctx.db.query("employees").collect();
     const now = Date.now();
-    const threeHoursAgo = now - 3 * 60 * 60 * 1000;
+    const cutoff = now - 20 * 60 * 60 * 1000; // 20h lookback
     const result: Array<{
       employeeId: string;
       employeeName: string;
@@ -90,48 +89,50 @@ export const getClockedOutToday = query({
         .order("desc")
         .first();
       if (!globalLast || globalLast.type !== "out") continue;
-      // Quick check: if last clock-out is older than shift start AND older than 3h, skip
-      if (globalLast.timestamp < shiftStartTs && globalLast.timestamp < threeHoursAgo) continue;
+      if (globalLast.timestamp < cutoff) continue;
 
-      // Get recent events for this employee (last 50, desc) then filter to shift window
-      const allEmployeeEvents = await ctx.db
+      // Get recent events desc, walk backwards to reconstruct this shift
+      const recentDesc = await ctx.db
         .query("clockEvents")
         .filter((q) => q.eq(q.field("employeeId"), emp._id))
         .order("desc")
         .take(50);
 
-      // Sort asc
-      const sorted = [...allEmployeeEvents].sort((a, b) => a.timestamp - b.timestamp);
-
-      // Find events in the shift window, but also include the last "in" before the window
-      // so that an in-before-6am → out-after-6am pair still counts as work
+      // Walk backwards from the last out to find the shift start
+      // Stop when we hit a gap > 12h or run out of events
       const shiftEvents: Array<{ type: "in" | "out"; timestamp: number }> = [];
-      for (let i = 0; i < sorted.length; i++) {
-        if (sorted[i].timestamp >= shiftStartTs) {
-          // If first event in window is "out", check if previous event was "in" (before window)
-          if (shiftEvents.length === 0 && sorted[i].type === "out" && i > 0 && sorted[i - 1].type === "in") {
-            shiftEvents.push({ type: sorted[i - 1].type, timestamp: sorted[i - 1].timestamp });
-          }
-          shiftEvents.push({ type: sorted[i].type, timestamp: sorted[i].timestamp });
+      for (let i = 0; i < recentDesc.length; i++) {
+        const e = recentDesc[i];
+        // If there's a gap > 12h between this event and the next older one, this is the shift boundary
+        if (i > 0) {
+          const gap = recentDesc[i - 1].timestamp - e.timestamp;
+          if (gap > 12 * 60 * 60 * 1000) break;
+        }
+        shiftEvents.unshift({ type: e.type, timestamp: e.timestamp });
+        // If we hit an "in" that started this shift (no preceding "out"), stop
+        if (e.type === "in" && (i + 1 >= recentDesc.length || recentDesc[i + 1].type !== "out")) {
+          break;
         }
       }
-      const events = shiftEvents;
 
       let workedMs = 0;
-      for (let i = 0; i < events.length; i++) {
-        if (events[i].type === "in" && events[i + 1]?.type === "out") {
-          workedMs += events[i + 1].timestamp - events[i].timestamp;
+      let breakMs = 0;
+      for (let i = 0; i < shiftEvents.length; i++) {
+        if (shiftEvents[i].type === "in" && shiftEvents[i + 1]?.type === "out") {
+          workedMs += shiftEvents[i + 1].timestamp - shiftEvents[i].timestamp;
+        }
+        if (shiftEvents[i].type === "out" && shiftEvents[i + 1]?.type === "in") {
+          breakMs += shiftEvents[i + 1].timestamp - shiftEvents[i].timestamp;
         }
       }
 
-      // Show if they have work time OR clocked out recently (within 3h)
-      if (workedMs > 0 || globalLast.timestamp >= threeHoursAgo) {
+      if (workedMs > 0 || breakMs > 0) {
         result.push({
           employeeId: emp._id,
           employeeName: emp.name,
           workedMs,
           lastOutTs: globalLast.timestamp,
-          shiftEvents: events,
+          shiftEvents,
         });
       }
     }
