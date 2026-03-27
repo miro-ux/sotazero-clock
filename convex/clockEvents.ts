@@ -65,6 +65,47 @@ export const getEventsForEmployee = query({
   },
 });
 
+/** Returns employees who worked today but are currently clocked out */
+export const getClockedOutToday = query({
+  args: { date: v.string() },
+  handler: async (ctx, { date }) => {
+    // Get all events for today
+    const todayEvents = await ctx.db
+      .query("clockEvents")
+      .withIndex("by_date", (q) => q.eq("date", date))
+      .order("asc")
+      .collect();
+
+    // Group by employee
+    const byEmployee = new Map<string, { employeeName: string; events: Array<{ type: "in" | "out"; timestamp: number }> }>();
+    for (const e of todayEvents) {
+      const existing = byEmployee.get(e.employeeId);
+      if (existing) {
+        existing.events.push({ type: e.type, timestamp: e.timestamp });
+      } else {
+        byEmployee.set(e.employeeId, { employeeName: e.employeeName, events: [{ type: e.type, timestamp: e.timestamp }] });
+      }
+    }
+
+    // Filter to employees whose last event is "out"
+    const result: Array<{ employeeId: string; employeeName: string; workedMs: number }> = [];
+    for (const [employeeId, { employeeName, events }] of byEmployee) {
+      const last = events[events.length - 1];
+      if (last.type === "out") {
+        // Calculate worked time
+        let workedMs = 0;
+        for (let i = 0; i < events.length; i++) {
+          if (events[i].type === "in" && events[i + 1]?.type === "out") {
+            workedMs += events[i + 1].timestamp - events[i].timestamp;
+          }
+        }
+        result.push({ employeeId, employeeName, workedMs });
+      }
+    }
+    return result.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  },
+});
+
 /** Returns all employees currently clocked in (last event = "in") with today's shift events */
 export const getCurrentlyIn = query({
   args: {},
