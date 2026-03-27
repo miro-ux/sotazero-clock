@@ -176,7 +176,7 @@ export default function HomePage() {
   // ── Success overlay ──
   if (stage === "success" && employee) {
     return (
-      <div className={cn("h-screen w-full overflow-hidden flex flex-col items-center justify-center gap-8 fade-in", successBg)}>
+      <div className={cn("fixed inset-0 overflow-hidden flex flex-col items-center justify-center gap-8 fade-in", successBg)}>
         <CheckCircle size={96} className={iconColor} strokeWidth={1.5} />
         <div className="text-center">
           <p className="text-white/90 text-4xl font-light">{employee.name}</p>
@@ -191,7 +191,7 @@ export default function HomePage() {
   // ── Confirm overlay ──
   if (stage === "confirm" && employee) {
     return (
-      <div className={cn("h-screen w-full overflow-hidden flex flex-col items-center justify-center gap-10 px-8", successBg)}>
+      <div className={cn("fixed inset-0 overflow-hidden flex flex-col items-center justify-center gap-10 px-8", successBg)}>
         <div className="fade-in flex flex-col items-center gap-8 text-center w-full max-w-sm">
           <div>
             <p className="text-white/40 text-sm uppercase tracking-widest mb-2">
@@ -225,7 +225,7 @@ export default function HomePage() {
   // ── Loading overlay ──
   if (stage === "submitting" || (stage === "lookup" && employee !== null)) {
     return (
-      <div className="h-screen w-full overflow-hidden flex items-center justify-center bg-[#0a0a0f]">
+      <div className="fixed inset-0 overflow-hidden flex items-center justify-center bg-[#0a0a0f]">
         <Loader2 size={56} className="text-white/30 animate-spin" />
       </div>
     );
@@ -286,23 +286,25 @@ export default function HomePage() {
         <>
           <div className="h-px bg-white/8 my-4" />
           <div className="flex items-center gap-3 mb-4">
-            <LogOut size={18} className="text-orange-400/70" />
+            <LogOut size={18} className="text-white/30" />
             <span className="text-white/30 text-sm uppercase tracking-widest">Clocked Out</span>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 opacity-50 grayscale">
             {clockedOutToday.map((person) => {
               const shift = computeShift(person.shiftEvents ?? []);
               return (
                 <div
                   key={person.employeeId}
-                  className="px-4 py-3 rounded-xl bg-orange-950/20 border border-orange-800/15"
+                  className="px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-orange-500/15 flex items-center justify-center text-orange-300/70 text-base font-light shrink-0">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-xl font-light shrink-0">
                       {person.employeeName[0].toUpperCase()}
                     </div>
-                    <p className="text-white/50 text-lg font-light truncate flex-1">{person.employeeName}</p>
-                    <span className="text-orange-400/50 text-sm font-mono">{formatDuration(person.workedMs)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white/90 text-2xl font-bold truncate">{person.employeeName}</p>
+                      <span className="text-emerald-400 text-sm font-mono">{formatDuration(person.workedMs)}</span>
+                    </div>
                   </div>
                   <ShiftBar segments={shift.segments} />
                 </div>
