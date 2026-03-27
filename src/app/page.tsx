@@ -10,6 +10,13 @@ import { cn } from "@/lib/utils";
 
 type Stage = "pin" | "lookup" | "confirm" | "submitting" | "success";
 
+type SelectedPerson = {
+  employeeName: string;
+  shiftEvents: Array<{ type: "in" | "out"; timestamp: number }>;
+  lastOutTs?: number;
+  isCurrentlyIn: boolean;
+};
+
 function formatDuration(ms: number): string {
   const totalMin = Math.floor(ms / 60000);
   const h = Math.floor(totalMin / 60);
@@ -50,16 +57,19 @@ function computeShift(events: Array<{ type: "in" | "out"; timestamp: number }>) 
  * 12h face: 12 at top (0°), 3 at right (90°), 6 at bottom (180°), 9 at left (270°).
  * Breaks only show orange if followed by a subsequent work segment.
  */
-function ShiftClock({ workMs, segments }: {
+function ShiftClock({ workMs, segments, size = 48 }: {
   workMs: number;
   breakMs?: number;
   segments: Array<{ type: "work" | "break"; start: number; end: number }>;
+  size?: number;
 }) {
   if (segments.length === 0 || workMs <= 0) return null;
 
-  const R = 20;
-  const CX = 24;
-  const CY = 24;
+  const scale = size / 48;
+  const R = 20 * scale;
+  const CX = 24 * scale;
+  const CY = 24 * scale;
+  const strokeW = 5 * scale;
 
   /** Convert a timestamp to degrees on a 12h clock (12=0°, 3=90°, 6=180°, 9=270°) */
   function tsToDeg(ts: number): number {
@@ -100,10 +110,13 @@ function ShiftClock({ workMs, segments }: {
     }
   }
 
+  const tickOuter = R + 2 * scale;
+  const tickInner = R - 1 * scale;
+
   return (
-    <svg width="48" height="48" viewBox="0 0 48 48" className="shrink-0" role="img" aria-label="Shift clock">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0" role="img" aria-label="Shift clock">
       {/* Background ring */}
-      <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+      <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeW} />
       {/* Segment arcs */}
       {arcs.map((arc) => (
         <path
@@ -111,25 +124,25 @@ function ShiftClock({ workMs, segments }: {
           d={arc.path}
           fill="none"
           stroke={arc.color}
-          strokeWidth="5"
-          strokeLinecap="round"
+          strokeWidth={strokeW}
+          strokeLinecap="butt"
           style={{ opacity: 0.8 }}
         />
       ))}
       {/* 12 hour tick marks — 12 at top, 3 at right, 6 at bottom, 9 at left */}
       {Array.from({ length: 12 }).map((_, i) => {
-        const deg = i * 30; // 0=12, 90=3, 180=6, 270=9
+        const deg = i * 30;
         const rad = (deg - 90) * (Math.PI / 180);
-        const x1 = CX + (R + 2) * Math.cos(rad);
-        const y1 = CY + (R + 2) * Math.sin(rad);
-        const x2 = CX + (R - 1) * Math.cos(rad);
-        const y2 = CY + (R - 1) * Math.sin(rad);
+        const x1 = CX + tickOuter * Math.cos(rad);
+        const y1 = CY + tickOuter * Math.sin(rad);
+        const x2 = CX + tickInner * Math.cos(rad);
+        const y2 = CY + tickInner * Math.sin(rad);
         return (
           <line
             key={`t${deg}`}
             x1={x1} y1={y1} x2={x2} y2={y2}
             stroke="rgba(255,255,255,0.15)"
-            strokeWidth={i % 3 === 0 ? 1.5 : 0.5}
+            strokeWidth={i % 3 === 0 ? 1.5 * scale : 0.5 * scale}
           />
         );
       })}
@@ -166,6 +179,14 @@ function fmtTime(ts: number): string {
   return `${hh}:${mm}`;
 }
 
+function fmtDate(ts: number): string {
+  const d = new Date(ts);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mo}/${yyyy}`;
+}
+
 export default function HomePage() {
   const router = useRouter();
   const currentlyIn = useQuery(api.clockEvents.getCurrentlyIn);
@@ -177,6 +198,7 @@ export default function HomePage() {
   const [submitError, setSubmitError] = useState("");
   const [resolvedAction, setResolvedAction] = useState<"in" | "out">("in");
   const [, setTick] = useState(0);
+  const [selectedPerson, setSelectedPerson] = useState<SelectedPerson | null>(null);
 
   // Refresh "time since" display every 15s
   useEffect(() => {
@@ -341,9 +363,11 @@ export default function HomePage() {
           currentlyIn.map((person) => {
             const shift = computeShift(person.shiftEvents ?? []);
             return (
-              <div
+              <button
                 key={person.employeeId}
-                className="px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20"
+                type="button"
+                onClick={() => setSelectedPerson({ employeeName: person.employeeName, shiftEvents: person.shiftEvents ?? [], isCurrentlyIn: true })}
+                className="px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20 text-left w-full hover:bg-emerald-950/60 hover:border-emerald-700/30 transition-colors active:scale-[0.98] transition-transform"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-xl font-light shrink-0">
@@ -363,7 +387,7 @@ export default function HomePage() {
                   </div>
                   <ShiftClock workMs={shift.workMs} segments={shift.segments} />
                 </div>
-              </div>
+              </button>
             );
           })
         )}
@@ -377,13 +401,16 @@ export default function HomePage() {
             <LogOut size={18} className="text-white/30" />
             <span className="text-white/30 text-sm uppercase tracking-widest">Clocked Out</span>
           </div>
-          <div className="flex flex-col gap-2" style={{ filter: "saturate(0.5)", opacity: 0.5 }}>
+          <div className="flex flex-col gap-2">
             {clockedOutToday.map((person) => {
               const shift = computeShift(person.shiftEvents ?? []);
               return (
-                <div
+                <button
                   key={person.employeeId}
-                  className="px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20"
+                  type="button"
+                  onClick={() => setSelectedPerson({ employeeName: person.employeeName, shiftEvents: person.shiftEvents ?? [], lastOutTs: person.lastOutTs, isCurrentlyIn: false })}
+                  className="px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/20 text-left w-full hover:bg-emerald-950/60 hover:border-emerald-700/30 transition-colors active:scale-[0.98]"
+                  style={{ filter: "saturate(0.5)", opacity: 0.5 }}
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-xl font-light shrink-0">
@@ -404,7 +431,7 @@ export default function HomePage() {
                     </div>
                     <ShiftClock workMs={shift.workMs} segments={shift.segments} />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -478,6 +505,160 @@ export default function HomePage() {
           accentColor="emerald"
         />
       </div>
+
+      {/* Person detail modal */}
+      {selectedPerson && (
+        <PersonModal person={selectedPerson} onClose={() => setSelectedPerson(null)} />
+      )}
+    </div>
+  );
+}
+
+function PersonModal({ person, onClose }: { person: SelectedPerson; onClose: () => void }) {
+  const shift = computeShift(person.shiftEvents);
+
+  // ESC to close
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center fade-in">
+      {/* Backdrop */}
+      <button
+        type="button"
+        aria-label="Close"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-default"
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <div className="relative bg-[#0e0e16] border border-white/10 rounded-3xl p-8 w-full max-w-md mx-4 flex flex-col items-center gap-6 shadow-2xl">
+        {/* Close button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 text-white/25 hover:text-white/60 transition-colors text-xl leading-none"
+        >
+          ✕
+        </button>
+
+        {/* Name + status */}
+        <div className="text-center">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 text-3xl font-light mx-auto mb-3">
+            {person.employeeName[0].toUpperCase()}
+          </div>
+          <p className="text-white text-3xl font-light">{person.employeeName}</p>
+          <p className={cn("text-sm mt-1 uppercase tracking-widest", person.isCurrentlyIn ? "text-emerald-400" : "text-white/30")}>
+            {person.isCurrentlyIn ? "Currently In" : "Clocked Out"}
+          </p>
+        </div>
+
+        {/* Large ShiftClock */}
+        <div className="flex flex-col items-center gap-3">
+          <ShiftClock workMs={shift.workMs} segments={shift.segments} size={160} />
+          <div className="flex gap-6 text-sm">
+            <span className="text-emerald-400 font-mono flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+              Work {formatDuration(shift.workMs)}
+            </span>
+            {shift.breakMs > 0 && (
+              <span className="text-orange-400 font-mono flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
+                Break {formatDuration(shift.breakMs)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Session rows */}
+        {person.shiftEvents.length > 0 && (
+          <div className="w-full">
+            <p className="text-white/25 text-xs uppercase tracking-widest mb-3">Sessions</p>
+            <ShiftSessionRows events={person.shiftEvents} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Renders work sessions as paired In→Out rows with break gaps between them.
+ * An open session (currently in, no out yet) shows a live "ongoing" row.
+ */
+function ShiftSessionRows({
+  events,
+}: {
+  events: Array<{ type: "in" | "out"; timestamp: number }>;
+}) {
+  // Build sessions: array of { inTs, outTs|null, breakAfterMs|null }
+  type Session = { inTs: number; outTs: number | null; breakAfterMs: number | null };
+  const sessions: Session[] = [];
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.type !== "in") continue;
+    const outEvent = events[i + 1]?.type === "out" ? events[i + 1] : null;
+    const outTs = outEvent?.timestamp ?? null;
+    // Break = gap between this out and next in
+    const nextIn = outTs != null ? (events[i + 2]?.type === "in" ? events[i + 2] : null) : null;
+    const breakAfterMs = outTs != null && nextIn ? nextIn.timestamp - outTs : null;
+    sessions.push({ inTs: e.timestamp, outTs, breakAfterMs });
+  }
+
+  if (sessions.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      {sessions.map((s, idx) => {
+        const durationMs = s.outTs != null ? s.outTs - s.inTs : Date.now() - s.inTs;
+        const isLast = idx === sessions.length - 1;
+        return (
+          <div key={s.inTs}>
+            {/* Work session row */}
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/20">
+              {/* In */}
+              <div className="flex flex-col items-center min-w-[52px]">
+                <span className="text-emerald-400/50 text-[10px] uppercase tracking-widest leading-none mb-0.5">In</span>
+                <span className="text-emerald-300 text-base font-mono leading-none">{fmtTime(s.inTs)}</span>
+                <span className="text-emerald-900/80 text-[9px] font-mono leading-none mt-0.5">{fmtDate(s.inTs)}</span>
+              </div>
+              {/* Arrow + duration */}
+              <div className="flex-1 flex flex-col items-center gap-0.5">
+                <div className="flex items-center w-full gap-1">
+                  <div className="flex-1 h-px bg-emerald-800/40" />
+                  <span className="text-white/30 text-[10px] font-mono shrink-0">{formatDuration(durationMs)}</span>
+                  <div className="flex-1 h-px bg-emerald-800/40" />
+                </div>
+              </div>
+              {/* Out */}
+              <div className="flex flex-col items-center min-w-[52px]">
+                <span className="text-white/30 text-[10px] uppercase tracking-widest leading-none mb-0.5">Out</span>
+                {s.outTs != null ? (
+                  <>
+                    <span className="text-white/60 text-base font-mono leading-none">{fmtTime(s.outTs)}</span>
+                    <span className="text-white/20 text-[9px] font-mono leading-none mt-0.5">{fmtDate(s.outTs)}</span>
+                  </>
+                ) : (
+                  <span className="text-emerald-400 text-xs font-mono leading-none animate-pulse">now</span>
+                )}
+              </div>
+            </div>
+            {/* Break gap between sessions */}
+            {!isLast && s.breakAfterMs != null && s.breakAfterMs > 60_000 && (
+              <div className="flex items-center gap-2 px-4 py-1.5 my-1">
+                <div className="flex-1 h-px border-t border-dashed border-orange-900/40" />
+                <span className="text-orange-400/50 text-[10px] font-mono shrink-0">
+                  break {formatDuration(s.breakAfterMs)}
+                </span>
+                <div className="flex-1 h-px border-t border-dashed border-orange-900/40" />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
